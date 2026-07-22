@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import { Figtree, Spline_Sans_Mono } from 'next/font/google';
 import './globals.css';
-import { cn } from '@/lib/utils';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { ThemeProvider } from '@/components/theme-provider';
-import { Providers } from '@/components/providers';
+import { cn } from '@/src/lib/utils';
+import { TooltipProvider } from '@/src/components/ui/tooltip';
+import { ThemeProvider } from '@/src/components/theme-provider';
+import { Providers } from '@/src/components/providers';
 
 const figtree = Figtree({ subsets: ['latin'], variable: '--font-sans' });
 
