@@ -1,0 +1,191 @@
+import React from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import { File, X, Eye, Code, Monitor, Tablet, Smartphone } from "lucide-react";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { motion } from "motion/react";
+import OrangeButton from "../landing/button/orange-button";
+import { SignedIn, UserButton } from "@clerk/nextjs";
+import ExportGithubDialog from "./export-github";
+import { FileSystemTree } from "@webcontainer/api";
+
+interface TabInfo {
+  id: string;
+  name: string;
+  path: string;
+  isDirty: boolean;
+  content: string;
+}
+
+interface NavBarProps {
+  openTabs: TabInfo[];
+  currentTabId: string | null;
+  setCurrentTabId: (id: string) => void;
+  handleCloseTab: (id: string) => void;
+  showAiChat: boolean;
+  setShowAiChat: (v: boolean | ((prev: boolean) => boolean)) => void;
+  showExplorer: boolean;
+  setShowExplorer: (v: boolean | ((prev: boolean) => boolean)) => void;
+  showTerminal: boolean;
+  setShowTerminal: (v: boolean | ((prev: boolean) => boolean)) => void;
+  handleSaveCurrentFile: () => void;
+  liveUrl: string | null;
+  activeTab?: "code" | "preview";
+  setActiveTab?: (tab: "code" | "preview") => void;
+  previewDevice?: "desktop" | "tablet" | "mobile";
+  setPreviewDevice?: (device: "desktop" | "tablet" | "mobile") => void;
+  fileStructure: FileSystemTree;
+  projectName?: string;
+}
+
+const NavBar: React.FC<NavBarProps> = ({
+  openTabs,
+  currentTabId,
+  setCurrentTabId,
+  handleCloseTab,
+  showAiChat,
+  setShowAiChat,
+  showExplorer,
+  setShowExplorer,
+  showTerminal,
+  setShowTerminal,
+  handleSaveCurrentFile,
+  liveUrl,
+  activeTab = "code",
+  setActiveTab = () => {},
+  previewDevice = "desktop",
+  setPreviewDevice = () => {},
+  fileStructure,
+  projectName,
+}) => {
+  const devices = [
+    { id: "desktop", icon: Monitor, label: "Desktop" },
+    { id: "tablet", icon: Tablet, label: "Tablet" },
+    { id: "mobile", icon: Smartphone, label: "Mobile" },
+  ] as const;
+
+  return (
+    <div className="flex items-center justify-between pr-2 bg-muted/30 h-[49px] border-b">
+      <div className="flex items-center overflow-x-auto flex-1 h-full hide-scrollbar">
+        {openTabs.length === 0
+          ? ""
+          : openTabs.map((tab) => (
+              <div
+                key={tab.id}
+                className={`group relative flex items-center gap-1.5 px-3 h-full text-sm cursor-pointer transition-all border-t-2 ${
+                  currentTabId === tab.id
+                    ? "bg-background text-foreground border-t-[#FA6000]"
+                    : "bg-transparent text-muted-foreground border-t-transparent hover:bg-accent/50 hover:text-foreground"
+                }`}
+                onClick={() => setCurrentTabId(tab.id)}
+              >
+                <File
+                  size={14}
+                  className={`shrink-0 transition-colors ${
+                    currentTabId === tab.id
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }`}
+                />
+                <span className={`truncate max-w-[150px] transition-colors ${
+                  tab.isDirty ? "text-amber-400" : ""
+                }`}>
+                  {tab.name}
+                </span>
+                <X
+                  size={14}
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCloseTab(tab.id);
+                  }}
+                />
+              </div>
+            ))}
+      </div>
+      <div className="flex items-center gap-2 ml-2 h-full">
+        <ButtonGroup className="border rounded-md overflow-hidden">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveTab("preview")}
+            className={`text-xs rounded-none ${
+              activeTab === "preview" ? "bg-accent" : ""
+            }`}
+          >
+            <Eye className="h-3 w-3 mr-1" />
+            Preview
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveTab("code")}
+            className={`text-xs rounded-none ${
+              activeTab === "code" ? "bg-accent" : ""
+            }`}
+          >
+            <Code className="h-3 w-3 mr-1" />
+            Code
+          </Button>
+        </ButtonGroup>
+
+        {activeTab === "preview" && (
+          <div className="flex items-center border rounded-md overflow-hidden h-8">
+            {devices.map((device) => {
+              const Icon = device.icon;
+              const isActive = previewDevice === device.id;
+              return (
+                <Tooltip key={device.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setPreviewDevice(device.id)}
+                      className={`relative px-2 h-10 transition-colors flex items-center justify-center ${
+                        isActive
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:bg-accent/50"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 relative z-10" />
+                      {isActive && (
+                        <motion.div
+                          layoutId="activeDevicePill"
+                          className="absolute inset-0 bg-accent z-0"
+                          transition={{
+                            type: "spring",
+                            stiffness: 300,
+                            damping: 30,
+                          }}
+                        />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{device.label}</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+        )}
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <ExportGithubDialog 
+              fileStructure={fileStructure} 
+              projectName={projectName}
+            />
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Export to GitHub</p>
+          </TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+};
+
+export default NavBar;

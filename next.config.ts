@@ -1,7 +1,13 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+const nextConfig = {
+  reactCompiler: true,
+  // async redirects() {
+  //   return [
+  //     {
+  //       source: "/",
+  //       destination: "/workflows",
+  //       permanent: false,
+  //     },
+  //   ];
+  // },
+  devIndicators: false,
 };
-
-export default nextConfig;
