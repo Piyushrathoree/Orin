@@ -36,7 +36,7 @@ const HeroSection = () => {
       <div className="mt-8 sm:mt-12 md:mt-16 flex flex-col sm:flex-row gap-4 sm:gap-6 lg:gap-8 px-4 sm:px-0 w-full sm:w-auto">
         <Button asChild className="bg-orange-600 rounded-none" >
           <Link href="/main">
-            Launch Cocursor
+            Launch Orin
           </Link>
         </Button>
         <Button asChild variant="outline" className="rounded-none">
@@ -50,7 +50,7 @@ const HeroSection = () => {
         <img
           src="/image/hero.png"
           className="w-full h-full z-50 overflow-hidden object-contain"
-          alt="Cocursor Dashboard"
+          alt="Orin Dashboard"
         />
       </div>
       <svg

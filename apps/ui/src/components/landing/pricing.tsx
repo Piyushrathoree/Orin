@@ -8,7 +8,7 @@ export default function Pricing() {
             <div className="mx-auto max-w-5xl px-6">
                 <div className="mx-auto max-w-2xl space-y-6 text-center">
                     <h1 className="text-center text-4xl font-semibold lg:text-5xl">Pricing that Scales with You</h1>
-                    <p className="text-muted-foreground">Cocursor is evolving to be more than just an IDE. It supports an entire ecosystem of AI agents and collaboration tools helping teams innovate faster.</p>
+                    <p className="text-muted-foreground">Orin is evolving to be more than just an IDE. It supports an entire ecosystem of AI agents and collaboration tools helping teams innovate faster.</p>
                 </div>
 
                 <div className="mt-8 grid gap-6 md:mt-20 md:grid-cols-5 md:gap-0">

@@ -2,11 +2,16 @@
   "name": "orin",
   "private": true,
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "build": "bun run --cwd apps/ui build",
+    "dev": "bun run --cwd apps/ui dev",
+    "lint": "bun run --cwd apps/ui lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "check-types": "bun run --cwd apps/ui check-types",
+    "build:orin": "bun run --cwd apps/orin-backend build && bun run --cwd apps/ui build",
+    "dev:orin": "bun run --cwd apps/ui dev",
+    "dev:orin-backend": "bun run --cwd apps/orin-backend dev",
+    "lint:orin": "bun run --cwd apps/ui lint",
+    "check-types:orin": "bun run --cwd apps/ui check-types && bun run --cwd apps/orin-backend typecheck"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
@@ -21,6 +26,10 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4"
+  },
   "dependencies": {
     "@tanstack/react-query": "^5.90.19",
     "@tanstack/react-query-devtools": "^5.91.2"

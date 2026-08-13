@@ -26,12 +26,16 @@ interface IDEStore {
   ) => void;
   liveUrl: string | null;
   setLiveUrl: (url: string | null) => void;
+  previewRefreshKey: number;
+  refreshPreview: () => void;
   activeTab: "code" | "preview";
   setActiveTab: (tab: "code" | "preview") => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   loadingMessage: string;
   setLoadingMessage: (message: string) => void;
+  containerError: string | null;
+  setContainerError: (error: string | null) => void;
   isContainerBooted: boolean;
   setIsContainerBooted: (booted: boolean) => void;
   previewDevice: "desktop" | "tablet" | "mobile";
@@ -56,12 +60,17 @@ const createIDEStore = () =>
     setWebContainerRef: (ref) => set({ webContainerRef: ref }),
     liveUrl: null,
     setLiveUrl: (url) => set({ liveUrl: url }),
+    previewRefreshKey: 0,
+    refreshPreview: () =>
+      set((state) => ({ previewRefreshKey: state.previewRefreshKey + 1 })),
     activeTab: "code",
     setActiveTab: (tab) => set({ activeTab: tab }),
     isLoading: true,
     setIsLoading: (loading) => set({ isLoading: loading }),
     loadingMessage: "Initializing...",
     setLoadingMessage: (message) => set({ loadingMessage: message }),
+    containerError: null,
+    setContainerError: (error) => set({ containerError: error }),
     isContainerBooted: false,
     setIsContainerBooted: (booted) => set({ isContainerBooted: booted }),
     previewDevice: "desktop",

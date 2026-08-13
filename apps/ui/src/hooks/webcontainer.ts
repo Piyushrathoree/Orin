@@ -1,16 +1,15 @@
 import { useIDEStore } from "@/stores/ideStore";
 import { WebContainer, FileSystemTree } from "@webcontainer/api";
-import { useQuery } from "convex/react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { api } from "../../convex/_generated/api";
 
-export const useWebContainer = ({ projectId }: { projectId?: string }) => {
+export const useWebContainer = () => {
   const {
     webContainerRef,
     setLiveUrl,
     setIsLoading,
     setLoadingMessage,
+    setContainerError,
     setIsContainerBooted,
     isContainerBooted,
   } = useIDEStore();
@@ -31,6 +30,7 @@ export const useWebContainer = ({ projectId }: { projectId?: string }) => {
       containerBooted.current = true;
 
       try {
+        setContainerError(null);
         setLoadingMessage("Booting Container...");
         const wc = await WebContainer.boot();
         webContainerRef.current = wc;
@@ -57,7 +57,11 @@ export const useWebContainer = ({ projectId }: { projectId?: string }) => {
         return wc;
       } catch (error) {
         console.error("WebContainer error:", error);
-        toast.error("Failed to start WebContainer");
+        const message =
+          error instanceof Error ? error.message : "Unknown WebContainer error";
+        setContainerError(message);
+        setIsContainerBooted(false);
+        toast.error(`Failed to start WebContainer: ${message}`);
         containerBooted.current = false;
         setIsLoading(false);
         throw error;
@@ -68,6 +72,7 @@ export const useWebContainer = ({ projectId }: { projectId?: string }) => {
       setLiveUrl,
       setIsLoading,
       setLoadingMessage,
+      setContainerError,
       setIsContainerBooted,
     ],
   );

@@ -1,11 +1,117 @@
 import { useIDEStore } from "@/stores/ideStore";
-import { FileSystemTree } from "@webcontainer/api";
-import { useState, useCallback, useEffect } from "react";
+import type { FileSystemTree } from "@webcontainer/api";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { TabInfo } from "./topbar";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
+import { projectFiles } from "@/data/project-file";
+import type { TabInfo } from "./topbar";
+
+const PROJECT_STORAGE_PREFIX = "orin:project:";
+
+function storageKey(projectId?: string) {
+  return `${PROJECT_STORAGE_PREFIX}${projectId || "scratch"}`;
+}
+
+function readProjectTree(key: string): FileSystemTree | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const stored = window.localStorage.getItem(key);
+    return stored ? (JSON.parse(stored) as FileSystemTree) : null;
+  } catch (error) {
+    console.warn("[Orin UI] Could not read the local project:", error);
+    return null;
+  }
+}
+
+function writeProjectTree(key: string, tree: FileSystemTree) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(tree));
+  } catch (error) {
+    console.warn("[Orin UI] Could not save the local project:", error);
+  }
+}
+
+function normalizePath(path: string) {
+  return path.replace(/^\/+|\/+$/g, "");
+}
+
+function getNodeAtPath(tree: FileSystemTree, path: string) {
+  const parts = normalizePath(path).split("/").filter(Boolean);
+  let current = tree;
+
+  for (const [index, part] of parts.entries()) {
+    const node = current[part];
+    if (!node) return undefined;
+    if (index === parts.length - 1) return node;
+    if (!("directory" in node)) return undefined;
+    current = node.directory;
+  }
+
+  return undefined;
+}
+
+function setNodeAtPath(
+  tree: FileSystemTree,
+  path: string,
+  node: NonNullable<ReturnType<typeof getNodeAtPath>>,
+) {
+  const parts = normalizePath(path).split("/").filter(Boolean);
+  if (parts.length === 0) return tree;
+
+  const update = (current: FileSystemTree, index: number): FileSystemTree => {
+    const part = parts[index];
+    if (index === parts.length - 1) {
+      return { ...current, [part]: node };
+    }
+
+    const existing = current[part];
+    const child = existing && "directory" in existing ? existing.directory : {};
+    return {
+      ...current,
+      [part]: { directory: update(child, index + 1) },
+    };
+  };
+
+  return update(tree, 0);
+}
+
+function removeNodeAtPath(tree: FileSystemTree, path: string) {
+  const parts = normalizePath(path).split("/").filter(Boolean);
+  if (parts.length === 0) return tree;
+
+  const update = (current: FileSystemTree, index: number): FileSystemTree => {
+    const part = parts[index];
+    if (!current[part]) return current;
+
+    if (index === parts.length - 1) {
+      const next = { ...current };
+      delete next[part];
+      return next;
+    }
+
+    const existing = current[part];
+    if (!("directory" in existing)) return current;
+
+    return {
+      ...current,
+      [part]: { directory: update(existing.directory, index + 1) },
+    };
+  };
+
+  return update(tree, 0);
+}
+
+function nodeContent(node: NonNullable<ReturnType<typeof getNodeAtPath>>) {
+  if (!("file" in node)) return "";
+  if (typeof node.file === "string") return node.file;
+  return "contents" in node.file
+    ? typeof node.file.contents === "string"
+      ? node.file.contents
+      : new TextDecoder().decode(node.file.contents)
+    : "";
+}
 
 export const useExplorer = ({
   projectId,
@@ -20,127 +126,57 @@ export const useExplorer = ({
   setOpenTabs: (tabs: TabInfo[] | ((prev: TabInfo[]) => TabInfo[])) => void;
   setCurrentTabId: (id: string | null) => void;
 }) => {
-  const { fileStructure, setFileStructure, setActiveTab } = useIDEStore();
-
-  // Fetch project data from Convex
-  const project = useQuery(
-    api.project.get,
-    projectId ? { id: projectId as Id<"Project"> } : "skip",
-  );
-
-  // Sync fetched file tree to local state
-  useEffect(() => {
-    if (project?.fileTree) {
-      const remoteTree = project.fileTree as unknown as FileSystemTree;
-      setFileStructure(remoteTree);
-
-      const getRemoteContent = (
-        path: string,
-        tree: FileSystemTree,
-      ): string | undefined => {
-        const parts = path.split("/").filter(Boolean);
-        let current: any = tree;
-        for (const part of parts) {
-          if (!current || !current[part]) return undefined;
-          if (current[part].file) return (current[part].file as any).contents;
-          current = current[part].directory;
-        }
-        return undefined;
-      };
-
-      // Sync open tabs with remote data only if they aren't dirty
-      setOpenTabs((prevTabs) => {
-        let changed = false;
-        const updatedTabs = prevTabs.map((tab) => {
-          if (tab.isDirty) return tab;
-
-          const remoteContent = getRemoteContent(tab.path, remoteTree);
-          if (remoteContent !== undefined && remoteContent !== tab.content) {
-            changed = true;
-            return { ...tab, content: remoteContent };
-          }
-          return tab;
-        });
-
-        return changed ? updatedTabs : prevTabs;
-      });
-    }
-  }, [project?.fileTree, setFileStructure, setOpenTabs]);
-
-  // Convex mutations
-  const updateContentMutation = useMutation(api.node.updateContent);
-  const createFileMutation = useMutation(api.node.createFile);
-  const createFolderMutation = useMutation(api.node.createFolder);
-  const deleteNodeMutation = useMutation(api.node.deleteNode);
-  const renameNodeMutation = useMutation(api.node.renameNode);
-
+  const {
+    fileStructure,
+    setFileStructure,
+    setActiveTab,
+    refreshPreview,
+  } = useIDEStore();
+  const projectKey = storageKey(projectId);
+  const [storageLoaded, setStorageLoaded] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set(["vanilla-web-app", "vanilla-web-app/public"]),
   );
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
-  const toDbPath = useCallback((uiPath: string): string => {
-    return `/${uiPath.replace(/^\/+/, "")}`;
-  }, []);
+  useEffect(() => {
+    const savedTree = readProjectTree(projectKey);
+    // Hydrate the shared editor store from browser storage after mounting.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setFileStructure(savedTree ?? (projectFiles as unknown as FileSystemTree));
+    setOpenTabs([]);
+    setCurrentTabId(null);
+    setSelectedFile(null);
+    setStorageLoaded(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [projectKey, setCurrentTabId, setFileStructure, setOpenTabs]);
+
+  useEffect(() => {
+    if (storageLoaded) writeProjectTree(projectKey, fileStructure);
+  }, [fileStructure, projectKey, storageLoaded]);
 
   const toggleFolder = useCallback((folderName: string) => {
-    setExpandedFolders((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(folderName)) {
-        newSet.delete(folderName);
-      } else {
-        newSet.add(folderName);
-      }
-      return newSet;
+    setExpandedFolders((previous) => {
+      const next = new Set(previous);
+      if (next.has(folderName)) next.delete(folderName);
+      else next.add(folderName);
+      return next;
     });
   }, []);
 
   const getFileContent = useCallback(
-    (path: string): string => {
-      const parts = path.split("/");
-      let current: any = fileStructure;
-
-      for (const part of parts) {
-        const node = current[part];
-        if (!node) return "";
-
-        if ("directory" in node) {
-          current = node.directory;
-        } else if ("file" in node) {
-          return node.file.contents as string;
-        }
-      }
-
-      return "";
+    (path: string) => {
+      const node = getNodeAtPath(fileStructure, path);
+      return node ? nodeContent(node) : "";
     },
     [fileStructure],
   );
 
   const setFileContent = useCallback(
     (path: string, content: string) => {
-      const parts = path.split("/");
-
-      const updateTree = (tree: any, index: number): any => {
-        const name = parts[index];
-
-        if (index === parts.length - 1) {
-          return {
-            ...tree,
-            [name]: {
-              file: { contents: content },
-            },
-          };
-        }
-
-        return {
-          ...tree,
-          [name]: {
-            directory: updateTree(tree[name]?.directory ?? {}, index + 1),
-          },
-        };
-      };
-
-      setFileStructure((prev: FileSystemTree) => updateTree(prev, 0));
+      setFileStructure((previous: FileSystemTree) =>
+        setNodeAtPath(previous, path, { file: { contents: content } }),
+      );
     },
     [setFileStructure],
   );
@@ -148,96 +184,62 @@ export const useExplorer = ({
   const handleSaveCurrentFile = useCallback(async () => {
     if (!currentTabId) return;
 
-    const currentTab = openTabs.find((t) => t.id === currentTabId);
+    const currentTab = openTabs.find((tab) => tab.id === currentTabId);
     if (!currentTab) return;
 
-    const state = useIDEStore.getState();
-    const currentEditorView = state.editorView;
-    const webContainer = state.webContainerRef.current;
-
-    let contentToSave: string;
-
-    if (currentEditorView) {
-      contentToSave = currentEditorView.state.doc.toString();
-    } else {
-      contentToSave = currentTab.content;
-    }
-
+    const { editorView, webContainerRef } = useIDEStore.getState();
+    const content = editorView?.state.doc.toString() ?? currentTab.content;
     const saveToast = toast.loading(`Saving ${currentTab.name}...`);
 
     try {
-      // save to wc.
-      if (webContainer) {
-        const wcPath = `/${currentTab.path}`;
-        await webContainer.fs.writeFile(wcPath, contentToSave);
+      if (webContainerRef.current) {
+        await webContainerRef.current.fs.writeFile(`/${normalizePath(currentTab.path)}`, content);
       }
 
-      console.log(`[Save] Saved to WebContainer: /${currentTab.path}`);
-
-      // save to convexx
-      if (projectId) {
-        await updateContentMutation({
-          projectId: projectId as Id<"Project">,
-          path: `/${currentTab.path}`,
-          content: contentToSave,
-        });
-      }
-
-      // save to local
-      setFileContent(currentTab.path, contentToSave);
-
+      setFileContent(currentTab.path, content);
       setOpenTabs((tabs) =>
         tabs.map((tab) =>
           tab.id === currentTabId
-            ? { ...tab, isDirty: false, content: contentToSave }
+            ? { ...tab, isDirty: false, content }
             : tab,
         ),
       );
-
+      refreshPreview();
       toast.success(`Saved ${currentTab.name}`, { id: saveToast });
     } catch (error) {
-      console.error("[Save] Error:", error);
+      console.error("[Orin UI] Save failed:", error);
       toast.error("Failed to save file", { id: saveToast });
     }
-  }, [
-    projectId,
-    currentTabId,
-    openTabs,
-    setFileContent,
-    setOpenTabs,
-    updateContentMutation,
-    toDbPath,
-  ]);
+  }, [currentTabId, openTabs, refreshPreview, setFileContent, setOpenTabs]);
 
   const handleFileClick = useCallback(
     (path: string, name: string) => {
-      const existingTab = openTabs.find((tab) => tab.path === path);
+      const normalizedPath = normalizePath(path);
+      const existingTab = openTabs.find((tab) => tab.path === normalizedPath);
 
       if (existingTab) {
         setCurrentTabId(existingTab.id);
       } else {
-        const content = getFileContent(path);
-
         const newTab: TabInfo = {
           id: `tab-${Date.now()}`,
           name,
-          path,
+          path: normalizedPath,
           isDirty: false,
-          content,
+          content: getFileContent(normalizedPath),
         };
         setOpenTabs([...openTabs, newTab]);
         setCurrentTabId(newTab.id);
       }
 
-      setSelectedFile(path);
+      setSelectedFile(normalizedPath);
       setActiveTab("code");
     },
-    [openTabs, getFileContent, setOpenTabs, setCurrentTabId, setActiveTab],
+    [getFileContent, openTabs, setActiveTab, setCurrentTabId, setOpenTabs],
   );
 
   const handleFileContentChange = useCallback(
     (tabId: string, newContent: string) => {
-      setOpenTabs((tabs: TabInfo[]) =>
+      setOpenTabs((tabs) =>
         tabs.map((tab) =>
           tab.id === tabId
             ? { ...tab, content: newContent, isDirty: true }
@@ -248,147 +250,124 @@ export const useExplorer = ({
     [setOpenTabs],
   );
 
-  // Create a new file (synced to Convex)
   const handleCreateFile = useCallback(
-    async (path: string, content: string = "") => {
-      if (!projectId) return;
+    async (path: string, content = "") => {
+      const normalizedPath = normalizePath(path);
+      setFileStructure((previous: FileSystemTree) =>
+        setNodeAtPath(previous, normalizedPath, { file: { contents: content } }),
+      );
 
-      try {
-        const dbPath = toDbPath(path);
-        await createFileMutation({
-          projectId: projectId as Id<"Project">,
-          path: dbPath,
-          content,
-        });
-
-        // Also write to WebContainer
-        const wc = useIDEStore.getState().webContainerRef.current;
-        if (wc) {
-          try {
-            await wc.fs.writeFile(dbPath, content);
-          } catch {
-            // File might need parent dirs created first
-          }
-        }
-
-        // Update local file structure
-        setFileContent(path.replace(/^\/+/, ""), content);
-
-        toast.success(`Created ${path.split("/").pop()}`);
-      } catch (error) {
-        console.error("[CreateFile] Error:", error);
-        toast.error("Failed to create file");
+      const webContainer = useIDEStore.getState().webContainerRef.current;
+      if (webContainer) {
+        const webPath = `/${normalizedPath}`;
+        const parentPath = webPath.slice(0, webPath.lastIndexOf("/"));
+        if (parentPath) await webContainer.fs.mkdir(parentPath, { recursive: true });
+        await webContainer.fs.writeFile(webPath, content);
       }
+
+      toast.success(`Created ${normalizedPath.split("/").pop()}`);
     },
-    [projectId, createFileMutation, setFileContent, toDbPath],
+    [setFileStructure],
   );
 
-  // Create a new folder (synced to Convex)
   const handleCreateFolder = useCallback(
     async (path: string) => {
-      if (!projectId) return;
+      const normalizedPath = normalizePath(path);
+      setFileStructure((previous: FileSystemTree) =>
+        setNodeAtPath(previous, normalizedPath, { directory: {} }),
+      );
 
-      try {
-        const dbPath = toDbPath(path);
-        await createFolderMutation({
-          projectId: projectId as Id<"Project">,
-          path: dbPath,
-        });
-
-        // Also create in WebContainer
-        const wc = useIDEStore.getState().webContainerRef.current;
-        if (wc) {
-          try {
-            await wc.fs.mkdir(dbPath, { recursive: true });
-          } catch {
-            // Might already exist
-          }
-        }
-
-        toast.success(`Created folder ${path.split("/").pop()}`);
-      } catch (error) {
-        console.error("[CreateFolder] Error:", error);
-        toast.error("Failed to create folder");
+      const webContainer = useIDEStore.getState().webContainerRef.current;
+      if (webContainer) {
+        await webContainer.fs.mkdir(`/${normalizedPath}`, { recursive: true });
       }
+      toast.success(`Created folder ${normalizedPath.split("/").pop()}`);
     },
-    [projectId, createFolderMutation, toDbPath],
+    [setFileStructure],
   );
 
-  // Delete a file or folder (synced to Convex)
   const handleDeleteNode = useCallback(
     async (path: string) => {
-      if (!projectId) return;
+      const normalizedPath = normalizePath(path);
+      setFileStructure((previous: FileSystemTree) =>
+        removeNodeAtPath(previous, normalizedPath),
+      );
 
-      try {
-        const dbPath = toDbPath(path);
-        await deleteNodeMutation({
-          projectId: projectId as Id<"Project">,
-          path: dbPath,
-        });
-
-        // Also remove from WebContainer
-        const wc = useIDEStore.getState().webContainerRef.current;
-        if (wc) {
-          try {
-            await wc.fs.rm(dbPath, { recursive: true });
-          } catch {
-            // Already removed or doesn't exist
-          }
+      const webContainer = useIDEStore.getState().webContainerRef.current;
+      if (webContainer) {
+        try {
+          await webContainer.fs.rm(`/${normalizedPath}`, { recursive: true });
+        } catch {
+          // The file may already have been removed from the container.
         }
-
-        // Close any open tabs for deleted files (strip leading slash for tab path matching)
-        const tabPath = path.replace(/^\/+/, "");
-        setOpenTabs((tabs) => tabs.filter((tab) => !tab.path.startsWith(tabPath)));
-
-        toast.success(`Deleted ${path.split("/").pop()}`);
-      } catch (error) {
-        console.error("[DeleteNode] Error:", error);
-        toast.error("Failed to delete");
       }
+
+      setOpenTabs((tabs) =>
+        tabs.filter(
+          (tab) =>
+            tab.path !== normalizedPath &&
+            !tab.path.startsWith(`${normalizedPath}/`),
+        ),
+      );
+      toast.success(`Deleted ${normalizedPath.split("/").pop()}`);
     },
-    [projectId, deleteNodeMutation, setOpenTabs, toDbPath],
+    [setFileStructure, setOpenTabs],
   );
 
-  // Rename a file or folder (synced to Convex)
   const handleRenameNode = useCallback(
     async (oldPath: string, newPath: string) => {
-      if (!projectId) return;
+      const normalizedOldPath = normalizePath(oldPath);
+      const normalizedNewPath = normalizePath(newPath);
+      const node = getNodeAtPath(fileStructure, normalizedOldPath);
+      if (!node || !normalizedNewPath) return;
 
-      try {
-        await renameNodeMutation({
-          projectId: projectId as Id<"Project">,
-          oldPath: toDbPath(oldPath),
-          newPath: toDbPath(newPath),
-        });
+      setFileStructure((previous: FileSystemTree) =>
+        setNodeAtPath(
+          removeNodeAtPath(previous, normalizedOldPath),
+          normalizedNewPath,
+          node,
+        ),
+      );
 
-        // Update open tabs with new path
-        setOpenTabs((tabs) =>
-          tabs.map((tab) => {
-            if (tab.path === oldPath || tab.path.startsWith(`${oldPath}/`)) {
-              const updatedPath = tab.path.replace(oldPath, newPath);
-              return {
-                ...tab,
-                path: updatedPath,
-                name: updatedPath.split("/").pop() || tab.name,
-              };
-            }
-            return tab;
-          }),
-        );
-
-        toast.success(`Renamed to ${newPath.split("/").pop()}`);
-      } catch (error) {
-        console.error("[RenameNode] Error:", error);
-        toast.error("Failed to rename");
+      const webContainer = useIDEStore.getState().webContainerRef.current;
+      if (webContainer) {
+        try {
+          await webContainer.fs.rename(
+            `/${normalizedOldPath}`,
+            `/${normalizedNewPath}`,
+          );
+        } catch {
+          // Keep the local tree usable if the container has not caught up yet.
+        }
       }
+
+      setOpenTabs((tabs) =>
+        tabs.map((tab) => {
+          if (
+            tab.path !== normalizedOldPath &&
+            !tab.path.startsWith(`${normalizedOldPath}/`)
+          ) {
+            return tab;
+          }
+
+          const updatedPath = tab.path.replace(
+            normalizedOldPath,
+            normalizedNewPath,
+          );
+          return {
+            ...tab,
+            path: updatedPath,
+            name: updatedPath.split("/").pop() || tab.name,
+          };
+        }),
+      );
+      toast.success(`Renamed to ${normalizedNewPath.split("/").pop()}`);
     },
-    [projectId, renameNodeMutation, setOpenTabs, toDbPath],
+    [fileStructure, setFileStructure, setOpenTabs],
   );
 
-  const isLoading = projectId ? project === undefined : false;
-
   return {
-    fileStructure: project?.fileTree as unknown as FileSystemTree,
+    fileStructure,
     setFileStructure,
     expandedFolders,
     setExpandedFolders,
@@ -404,7 +383,10 @@ export const useExplorer = ({
     handleCreateFolder,
     handleDeleteNode,
     handleRenameNode,
-    isLoading,
-    project,
+    isLoading: !storageLoaded,
+    project: {
+      name: projectId ? "Orin project" : "New Orin project",
+      fileTree: fileStructure,
+    },
   };
 };

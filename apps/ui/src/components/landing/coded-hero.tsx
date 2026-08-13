@@ -44,7 +44,7 @@ const CodedHero = () => {
   const [messageInput, setMessageInput] = useState("");
   const [terminalLines, setTerminalLines] = useState([
     { type: "cmd", text: "npm run dev" },
-    { type: "out", text: "> cocursor-v1@1.0.0 dev" },
+    { type: "out", text: "> orin-v1@1.0.0 dev" },
     { type: "out", text: "> next dev --turbo" },
     { type: "out", text: "Ready in 412ms" },
   ]);
@@ -180,7 +180,7 @@ const CodedHero = () => {
                       { num: 6, text: "" },
                       { num: 7, text: <>  <span className="text-purple-400">return</span> (</> },
                       { num: 8, text: <>    &lt;<span className="text-orange-300">main</span> <span className="text-emerald-200">className</span>=<span className="text-emerald-300">"p-8"</span>&gt;</> },
-                      { num: 9, text: <>      &lt;<span className="text-orange-300">h1</span>&gt;Building with Cocursor&lt;/<span className="text-orange-300">h1</span>&gt;</> },
+                      { num: 9, text: <>      &lt;<span className="text-orange-300">h1</span>&gt;Building with Orin&lt;/<span className="text-orange-300">h1</span>&gt;</> },
                       { num: 10, text: <>      &lt;<span className="text-orange-300">Editor</span> /&gt;</> },
                       { num: 11, text: <>    &lt;/<span className="text-orange-300">main</span>&gt;</> },
                       { num: 12, text: <>  );</> },

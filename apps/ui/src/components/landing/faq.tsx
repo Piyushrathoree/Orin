@@ -11,15 +11,15 @@ import Link from "next/link";
 const faqItems = [
   {
     id: "item-1",
-    question: "What exactly is Cocursor?",
+    question: "What exactly is Orin?",
     answer:
-      "Cocursor is a collaborative, AI-powered code editor that runs entirely in your browser. It combines the power of advanced AI agents with a real-time multiplayer coding environment and a sandboxed Linux-like runtime.",
+      "Orin is a collaborative, AI-powered code editor that runs entirely in your browser. It combines the power of advanced AI agents with a real-time multiplayer coding environment and a sandboxed Linux-like runtime.",
   },
   {
     id: "item-2",
     question: "How does the AI assistance work?",
     answer:
-      "Cocursor features inline AI suggestions (ghost text), a context-aware prompt box (Ctrl+I), and an autonomous AI agent. The agent doesn't just suggest code; it can understand your entire project, plan features, and execute multi-step refactors.",
+      "Orin features inline AI suggestions (ghost text), a context-aware prompt box (Ctrl+I), and an autonomous AI agent. The agent doesn't just suggest code; it can understand your entire project, plan features, and execute multi-step refactors.",
   },
   {
     id: "item-3",
@@ -31,11 +31,11 @@ const faqItems = [
     id: "item-4",
     question: "What is the 'In-Browser Dev Environment'?",
     answer:
-      "Powered by WebContainers, Cocursor provides a secure, sandboxed Linux-like environment in your browser. You can run npm commands, start dev servers, and see live previews of your apps without installing anything locally.",
+      "Powered by WebContainers, Orin provides a secure, sandboxed Linux-like environment in your browser. You can run npm commands, start dev servers, and see live previews of your apps without installing anything locally.",
   },
   {
     id: "item-5",
-    question: "Is my code secure in Cocursor?",
+    question: "Is my code secure in Orin?",
     answer:
       "Yes. Coding and execution happen in a isolated sandbox via WebContainers. Your projects are stored securely, and collaboration features use modern encrypted sync layers to ensure your data stays private.",
   },
@@ -56,7 +56,7 @@ export default function FAQs() {
             <p className="text-muted-foreground @xl:block mt-6 hidden text-sm">
               Need more help?{" "}
               <Link
-                href="mailto:support@cocursor.ai"
+                href="mailto:support@orin.ai"
                 className="text-orange-500 font-medium hover:underline"
               >
                 Contact us
@@ -85,7 +85,7 @@ export default function FAQs() {
             <p className="text-muted-foreground @xl:hidden mt-6 text-sm">
               Need more help?{" "}
               <Link
-                href="mailto:support@cocursor.ai"
+                href="mailto:support@orin.ai"
                 className="text-orange-500 font-medium hover:underline"
               >
                 Contact us

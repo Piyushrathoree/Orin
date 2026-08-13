@@ -17,7 +17,7 @@ const Follower2 = () => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    const seedKey = "cocursor-follower2-seed";
+    const seedKey = "orin-follower2-seed";
     let seed = Math.floor(Math.random() * 1e9);
 
     if (typeof window !== "undefined") {

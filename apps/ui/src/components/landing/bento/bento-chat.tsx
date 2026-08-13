@@ -78,7 +78,7 @@ const ChatAnimation = () => {
             transition={{ duration: 0.3, delay: 1.0 }}
           >
             <div className="flex gap-2 sm:gap-3 items-center min-w-0">
-              <span className="text-sm sm:text-base truncate">Cocursor</span>
+              <span className="text-sm sm:text-base truncate">Orin</span>
             </div>
             <span className="text-xs shrink-0">4:35</span>
           </motion.div>

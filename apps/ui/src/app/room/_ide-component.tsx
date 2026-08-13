@@ -13,7 +13,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, RefreshCw, Loader2, FolderPlus } from "lucide-react";
+import { Plus, Loader2, FolderPlus } from "lucide-react";
 import FolderPreview, { FolderPreviewRef } from "@/components/ide-component/FolderPreview";
 import NavBar from "@/components/ide-component/NavBar";
 import TerminalComponent from "@/components/ide-component/terminal";
@@ -28,19 +28,17 @@ import { useWebContainer } from "@/hooks/webcontainer";
 import Chat from "@/components/ide-component/Chat";
 import ActivityBar from "@/components/ide-component/activity-bar";
 import SearchPanel from "@/components/ide-component/SearchPanel";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { FileSystemTree } from "@webcontainer/api";
+import type { FileSystemTree } from "@webcontainer/api";
 import { useWsRtcConnection } from "@/hooks/rtc-ws";
 import type { ImperativePanelHandle } from "react-resizable-panels";
+import { applyOrinActions, type OrinAction } from "@/lib/orin-artifact";
 
 interface IDEComponentProps {
   projectId?: string;
+  initialPrompt?: string;
 }
 
 const IDEComponent = ({ projectId }: IDEComponentProps) => {
-  // Fetch project data from Convex
-
   const roomConnection = useWsRtcConnection({ roomId: projectId || "" });
 
   console.log("Fetched project data:", projectId);
@@ -51,8 +49,11 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
     setActiveTab,
     isLoading,
     loadingMessage,
+    previewRefreshKey,
     previewDevice,
     setPreviewDevice,
+    setFileStructure,
+    refreshPreview,
   } = useIDEStore();
 
   const {
@@ -68,6 +69,8 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
     expandedFolders,
     selectedFile,
     toggleFolder,
+    setSelectedFile,
+    setFileContent,
     handleFileClick,
     handleSaveCurrentFile,
     handleFileContentChange,
@@ -75,6 +78,7 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
     handleCreateFolder,
     handleDeleteNode,
     handleRenameNode,
+    isLoading: isExplorerLoading,
   } = useExplorer({
     projectId,
     currentTabId,
@@ -100,23 +104,15 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
 
   const folderPreviewRef = useRef<FolderPreviewRef>(null);
 
-  const { initializeWebContainer, webContainerRef } = useWebContainer({
-    projectId,
-  });
+  const { initializeWebContainer, webContainerRef } = useWebContainer();
 
-  const getProjectData = useQuery(
-    api.project.get,
-    projectId ? { id: projectId as any } : "skip",
-  );
   useEffect(() => {
-    if (getProjectData) {
-      initializeWebContainer(getProjectData.fileTree as FileSystemTree).catch(
-        (error) => {
-          console.error("[IDE] Failed to initialize WebContainer:", error);
-        },
-      );
-    }
-  }, [initializeWebContainer, getProjectData]);
+    if (isExplorerLoading) return;
+
+    initializeWebContainer(fileStructure).catch((error: unknown) => {
+      console.error("[IDE] Failed to initialize WebContainer:", error);
+    });
+  }, [fileStructure, initializeWebContainer, isExplorerLoading]);
 
   // Teardown WebContainer only on unmount
   useEffect(() => {
@@ -132,14 +128,92 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
   }, []);
 
   const currentTab = openTabs.find((tab) => tab.id === currentTabId);
+  const editorSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (editorSyncTimerRef.current) {
+        clearTimeout(editorSyncTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const handleEditorChange = useCallback(
     (content: string) => {
-      if (currentTabId) {
-        handleFileContentChange(currentTabId, content);
+      if (!currentTabId || !currentTab) return;
+
+      handleFileContentChange(currentTabId, content);
+      setFileContent(currentTab.path, content);
+
+      if (editorSyncTimerRef.current) {
+        clearTimeout(editorSyncTimerRef.current);
       }
+
+      editorSyncTimerRef.current = setTimeout(() => {
+        const webContainer = webContainerRef.current;
+        if (!webContainer) return;
+
+        webContainer.fs
+          .writeFile(`/${currentTab.path}`, content)
+          .then(() => refreshPreview())
+          .catch((error: unknown) => {
+            console.error("[IDE] Could not sync the edited file:", error);
+          });
+      }, 400);
     },
-    [currentTabId, handleFileContentChange],
+    [currentTab, currentTabId, handleFileContentChange, refreshPreview, setFileContent, webContainerRef],
+  );
+
+  const applyGeneratedActions = useCallback(
+    async (actions: OrinAction[]) => {
+      const webContainer = webContainerRef.current;
+      if (webContainer) {
+        for (const action of actions) {
+          const path = `/${action.path}`;
+
+          if (action.type === "delete") {
+            try {
+              await webContainer.fs.rm(path);
+            } catch {
+              // The project tree remains the source of truth if the container is behind.
+            }
+            continue;
+          }
+
+          const parentPath = path.slice(0, path.lastIndexOf("/"));
+          if (parentPath) {
+            await webContainer.fs.mkdir(parentPath, { recursive: true });
+          }
+          await webContainer.fs.writeFile(path, action.content);
+        }
+      }
+
+      setFileStructure((previous: FileSystemTree) =>
+        applyOrinActions(previous, actions),
+      );
+
+      const finalActionsByPath = new Map(actions.map((action) => [action.path, action]));
+      setOpenTabs((tabs) =>
+        tabs.flatMap((tab) => {
+          const action = finalActionsByPath.get(tab.path);
+          if (!action) return [tab];
+          if (action.type === "delete") return [];
+          return [{ ...tab, content: action.content, isDirty: false }];
+        }),
+      );
+
+      if (
+        currentTab &&
+        finalActionsByPath.get(currentTab.path)?.type === "delete"
+      ) {
+        setCurrentTabId(null);
+        setSelectedFile(null);
+      }
+
+      refreshPreview();
+    },
+    [currentTab, refreshPreview, setCurrentTabId, setFileStructure, setOpenTabs, setSelectedFile, webContainerRef],
   );
 
   // Refs for imperative panel control
@@ -306,7 +380,7 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
                   previewDevice={previewDevice}
                   setPreviewDevice={setPreviewDevice}
                   fileStructure={fileStructure}
-                  projectName={getProjectData?.name}
+                  projectName={projectId ? "Orin project" : "New Orin project"}
                 />
 
                 <div className="flex flex-col flex-1 overflow-hidden">
@@ -326,6 +400,7 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
                               <PreviewFrame
                                 url={liveUrl}
                                 device={previewDevice}
+                                refreshKey={previewRefreshKey}
                               />
                             ) : (
                               <div className="flex items-center justify-center h-full">
@@ -349,7 +424,6 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
                                 key={currentTab.id}
                                 fileContent={currentTab.content}
                                 filePath={currentTab.path}
-                                projectId={projectId}
                                 onChange={handleEditorChange}
                               />
                             </div>
@@ -398,6 +472,8 @@ const IDEComponent = ({ projectId }: IDEComponentProps) => {
                 onClose={() => setShowAiChat(false)}
                 projectId={projectId}
                 roomConnection={roomConnection}
+                fileStructure={fileStructure}
+                onActionsGenerated={applyGeneratedActions}
               />
             </ResizablePanel>
           </ResizablePanelGroup>

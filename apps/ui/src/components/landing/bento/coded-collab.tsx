@@ -12,7 +12,7 @@ const CodeLine = ({ num, children, isEditing }: { num: number; children: React.R
 
 const CodedCollab = () => {
   const [line1, setLine1] = useState("const sync = () => {");
-  const [line2, setLine2] = useState("  return \"Cocursor\";");
+  const [line2, setLine2] = useState("  return \"Orin\";");
   const [line3, setLine3] = useState("};");
   const [line4, setLine4] = useState("");
   
@@ -29,21 +29,21 @@ const CodedCollab = () => {
 
       // Initial state
       setLine1("const sync = () => {");
-      setLine2("  return \"Cocursor\";");
+      setLine2("  return \"Orin\";");
       setLine3("};");
       setLine4("");
       setEditingLine(null);
 
       await new Promise(r => setTimeout(r, 2000));
 
-      // 1. Saara moves to line 2 to change "Cocursor" to "Fast"
+      // 1. Saara moves to line 2 to change "Orin" to "Fast"
       setSaaraPos({ x: 100, y: 24 });
       setEditingLine(2);
       
       const line2Base = "  return \"";
-      const words = ["Cocursor", "Fast"];
+      const words = ["Orin", "Fast"];
       
-      // Backspace "Cocursor"
+      // Backspace "Orin"
       for (let i = words[0].length; i >= 0; i--) {
         if (!isMounted) return;
         setLine2(line2Base + words[0].slice(0, i) + "\";");

@@ -4,14 +4,24 @@ import { X, Users, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AiChat from "./ai-chat";
 import PeerChat from "./peer-chat";
+import type { FileSystemTree } from "@webcontainer/api";
+import type { OrinAction } from "@/lib/orin-artifact";
 
 interface ChatProps {
   onClose: () => void;
   projectId?: string;
   roomConnection: any;
+  fileStructure: FileSystemTree;
+  onActionsGenerated?: (actions: OrinAction[]) => Promise<void> | void;
 }
 
-const Chat: React.FC<ChatProps> = ({ onClose, projectId, roomConnection }) => {
+const Chat: React.FC<ChatProps> = ({
+  onClose,
+  projectId,
+  roomConnection,
+  fileStructure,
+  onActionsGenerated,
+}) => {
   const { totalUserCount, peerConnected } = roomConnection;
   const [activeTab, setActiveTab] = useState<"ai" | "peer">("ai");
 
@@ -67,7 +77,10 @@ const Chat: React.FC<ChatProps> = ({ onClose, projectId, roomConnection }) => {
           )}
         >
           <div className="h-full">
-            <AiChat />
+            <AiChat
+              fileStructure={fileStructure}
+              onActionsGenerated={onActionsGenerated}
+            />
           </div>
         </div>
         <div

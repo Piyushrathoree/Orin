@@ -20,6 +20,7 @@ const TerminalComponent: React.FC = () => {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const shellProcessRef = useRef<any>(null);
   const inputWriterRef = useRef<any>(null);
+  const projectDirectoryRef = useRef("/");
 
   // Suggestions state
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -27,17 +28,39 @@ const TerminalComponent: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const getProjectDirectory = async () => {
+    if (!webContainerRef.current) return "/";
+
+    try {
+      await webContainerRef.current.fs.readFile("/package.json", "utf-8");
+      return "/";
+    } catch {
+      try {
+        await webContainerRef.current.fs.readFile(
+          "/vanilla-web-app/package.json",
+          "utf-8",
+        );
+        return "/vanilla-web-app";
+      } catch {
+        return "/";
+      }
+    }
+  };
+
   const startShell = async (terminal: Terminal) => {
     if (!webContainerRef.current) return;
 
     try {
+      const cwd = await getProjectDirectory();
+      projectDirectoryRef.current = cwd;
+
       // Start an interactive shell in the project directory
       const shellProcess = await webContainerRef.current.spawn("jsh", {
         terminal: {
           cols: terminal.cols,
           rows: terminal.rows,
         },
-        cwd: "/vanilla-web-app", // Start in the web app directory
+        cwd,
       });
 
       shellProcessRef.current = shellProcess;
@@ -88,7 +111,10 @@ const TerminalComponent: React.FC = () => {
         try {
           // We assume we are in the project dir or use absolute-ish paths
           // For simplicity, we list the current dir contents
-          const entries = await webContainerRef.current.fs.readdir("/vanilla-web-app", { withFileTypes: true });
+          const entries = await webContainerRef.current.fs.readdir(
+            projectDirectoryRef.current,
+            { withFileTypes: true },
+          );
           const dirs = entries
             .filter((e: any) => e.isDirectory())
             .map((e: any) => e.name)
@@ -306,4 +332,3 @@ const TerminalComponent: React.FC = () => {
 };
 
 export default TerminalComponent;
-

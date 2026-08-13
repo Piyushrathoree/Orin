@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef } from "react";
 import { EditorState } from "@codemirror/state";
 import { javascript } from "@codemirror/lang-javascript";
 import { css } from "@codemirror/lang-css";
@@ -19,13 +19,10 @@ import {
 } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
 import { useIDEStore } from "@/stores/ideStore";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
 
 interface CodeEditorProps {
   fileContent: string;
   filePath: string;
-  projectId?: string;
   onChange?: (content: string) => void;
 }
 
@@ -59,7 +56,6 @@ export default function CodeEditor({
   fileContent,
   filePath,
   onChange,
-  projectId,
 }: CodeEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -67,51 +63,9 @@ export default function CodeEditor({
   const initialContentRef = useRef(fileContent);
   const suppressOnChangeRef = useRef(false);
 
-  // Use the direct query for real-time sync if projectId is provided
-  const remoteContent = useQuery(
-    api.node.getContent,
-    projectId
-      ? {
-          projectId: projectId as any,
-          path: filePath.startsWith("/") ? filePath : `/${filePath}`,
-        }
-      : "skip",
-  );
-
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
-
-  // Sync with remote content if provided and if we're not currently editing (or it's the first load)
-  useEffect(() => {
-    if (remoteContent !== undefined && remoteContent !== null) {
-      // Only update if the content is actually different
-      if (viewRef.current) {
-        const currentContent = viewRef.current.state.doc.toString();
-        // Here we decide whether to overwrite.
-        // For simplicity, we only overwrite if the current content matches what we started with
-        // (basic check to see if user has typed anything since the last sync/load)
-        // If we want to be more sophisticated, we'd need isDirty passed in.
-        if (
-          remoteContent !== currentContent &&
-          initialContentRef.current === currentContent
-        ) {
-          suppressOnChangeRef.current = true;
-          viewRef.current.dispatch({
-            changes: {
-              from: 0,
-              to: currentContent.length,
-              insert: remoteContent,
-            },
-          });
-          suppressOnChangeRef.current = false;
-          initialContentRef.current = remoteContent;
-        }
-      } else {
-        initialContentRef.current = remoteContent;
-      }
-    }
-  }, [remoteContent]);
 
   useEffect(() => {
     initialContentRef.current = fileContent;

@@ -23,53 +23,69 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
-import {
-  ArrowUpRight,
-  FolderDown,
-  FolderOpen,
-  Trash2,
-} from "lucide-react";
+import { ArrowUpRight, FolderDown, FolderOpen, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useUser } from "@clerk/nextjs";
-import { Id } from "../../../convex/_generated/dataModel";
 
+type LocalProject = {
+  id: string;
+  name: string;
+  createdAt: number;
+};
 
-const type = [
+const PROJECTS_STORAGE_KEY = "orin:projects";
+
+const projectTypes = [
   {
     icon: <FolderOpen size={16} />,
     name: "Start new Project",
-    link: "/room",
   },
   {
     icon: <FolderDown size={16} />,
     name: "Create With Prompt",
-    link: "/room",
   },
   {
     icon: <FolderDown size={16} />,
     name: "Collab with friends",
-    link: "/room",
   },
 ];
 
+function readProjects(): LocalProject[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const stored = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+    const parsed = stored ? (JSON.parse(stored) as unknown) : [];
+    return Array.isArray(parsed) ? (parsed as LocalProject[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveProjects(projects: LocalProject[]) {
+  window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+}
+
+function createProjectId() {
+  return globalThis.crypto?.randomUUID?.() || `project-${Date.now()}`;
+}
+
 const Page = () => {
-  const { user, isLoaded } = useUser();
-  const router = useRouter();
-  const projects = useQuery(api.project.list, {});
-  const createUser = useMutation(api.user.createUserIfExists);
-  const createProject = useMutation(api.project.create);
-  const deleteProject = useMutation(api.project.remove);
+  const [projects, setProjects] = useState<LocalProject[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [projectName, setProjectName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
     null,
   );
-  const projectCount = projects?.length ?? 0;
+
+  useEffect(() => {
+    // Read browser storage after hydration so the server and client render match.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProjects(readProjects());
+  }, []);
+
+  const projectCount = projects.length;
   const isAtProjectLimit = projectCount >= 5;
 
   const formatCreationTime = (timestampMs: number) =>
@@ -81,77 +97,77 @@ const Page = () => {
       minute: "2-digit",
     }).format(new Date(timestampMs));
 
-  useEffect(() => {
-    if (!isLoaded || !user?.id) return;
-    createUser({ name: user.fullName ?? "Unknown", clerkId: user.id });
-  }, [isLoaded, user?.id, user?.fullName, createUser]);
-
-  const handleEnterRoom = async (event: React.FormEvent) => {
+  const handleEnterRoom = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!projectName.trim() || !user?.id) return;
-    if (isCreating) return;
-    if (isAtProjectLimit) return;
+    if (!projectName.trim() || isCreating || isAtProjectLimit) return;
 
     setIsCreating(true);
-    try {
-      const project = await createProject({
-        name: projectName.trim(),
-      });
-      setIsDialogOpen(false);
-      setProjectName("");
-      if (project?._id) {
-        router.push(`/room/${project._id}`);
-      } else {  
-        router.push("/room");
-      }
-    } finally {
-      setIsCreating(false);
-    }
+    const project: LocalProject = {
+      id: createProjectId(),
+      name: projectName.trim(),
+      createdAt: Date.now(),
+    };
+    const nextProjects = [project, ...projects].slice(0, 5);
+    saveProjects(nextProjects);
+    setProjects(nextProjects);
+    setIsDialogOpen(false);
+    setProjectName("");
+    window.location.assign(`/room/${project.id}`);
   };
 
-  const handleDeleteProject = async (projectId: Id<"Project">) => {
+  const handleDeleteProject = (projectId: string) => {
     if (deletingProjectId) return;
+
     setDeletingProjectId(projectId);
-    try {
-      await deleteProject({ id: projectId });
-    } finally {
-      setDeletingProjectId(null);
-    }
+    const nextProjects = projects.filter((project) => project.id !== projectId);
+    saveProjects(nextProjects);
+    window.localStorage.removeItem(`orin:project:${projectId}`);
+    setProjects(nextProjects);
+    setDeletingProjectId(null);
   };
 
-  const visibleProjects = projects?.slice(0, 5) ?? [];
+  const visibleProjects = projects.slice(0, 5);
 
   return (
-    <div className="flex justify-center items-center min-h-screen sm:h-screen sm:overflow-hidden w-full relative py-12 px-6 sm:px-0">
-      <div className="flex flex-col justify-center items-start w-full sm:w-auto max-w-4xl">
-        <Logo />
+    <div className="relative flex min-h-screen w-full justify-center bg-background px-6 py-10 sm:px-10">
+      <div className="flex w-full max-w-5xl flex-col items-start justify-center">
+        <div className="flex w-full items-start justify-between gap-6">
+          <div>
+            <Logo />
+            <p className="mt-4 text-sm text-muted-foreground">
+              Build, preview, and collaborate from one focused workspace.
+            </p>
+          </div>
+          <Link
+            href="/"
+            className="hidden rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary sm:inline-flex"
+          >
+            Back to landing
+          </Link>
+        </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <div className="grid grid-cols-2 sm:flex gap-3 sm:gap-4 mt-6 w-full">
-            {type.map((item, index) =>
-              index === 0 ? (
-                <DialogTrigger key={index} asChild disabled={isAtProjectLimit}>
-                  <div
-                    className={
-                      "flex flex-col p-4 rounded-md bg-muted w-full sm:w-40 transition-all duration-150" +
-                      (isAtProjectLimit
-                        ? " opacity-60 cursor-not-allowed"
-                        : " hover:bg-accent-foreground/20 cursor-pointer")
-                    }
-                  >
-                    {item.icon}
-                    <span className="text-sm mt-1">{item.name}</span>
-                  </div>
-                </DialogTrigger>
-              ) : (
-                <Link key={index} href={item.link}>
-                  <div className=" flex flex-col p-4 rounded-md bg-muted w-full sm:w-40 hover:bg-accent-foreground/20 transition-all duration-150 cursor-pointer">
-                    {item.icon}
-                    <span className="text-sm mt-1">{item.name}</span>
-                  </div>
-                </Link>
-              ),
-            )}
+          <div className="mt-8 grid w-full grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+            {projectTypes.map((item, index) => (
+              <DialogTrigger key={item.name} asChild disabled={isAtProjectLimit}>
+                <div
+                  className={
+                    "group flex w-full flex-col rounded-xl border border-border bg-card/60 p-4 transition-all duration-150" +
+                    (isAtProjectLimit
+                      ? " cursor-not-allowed opacity-60"
+                      : " cursor-pointer hover:border-primary/40 hover:bg-primary/5")
+                  }
+                >
+                  {item.icon}
+                  <span className="mt-3 text-sm font-medium">{item.name}</span>
+                  <span className="mt-1 text-xs text-muted-foreground">
+                    {index === 0
+                      ? "Start with a clean project"
+                      : "Create a project to continue"}
+                  </span>
+                </div>
+              </DialogTrigger>
+            ))}
           </div>
           <DialogContent>
             <DialogHeader>
@@ -163,7 +179,7 @@ const Page = () => {
             <form onSubmit={handleEnterRoom} className="grid gap-4">
               <Input
                 value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+                onChange={(event) => setProjectName(event.target.value)}
                 placeholder="Project name"
                 autoFocus
               />
@@ -186,32 +202,39 @@ const Page = () => {
             </form>
           </DialogContent>
         </Dialog>
-        <div className="flex mt-6 text-xs justify-between w-full">
-          <div>Recent projects</div>
-          <div>{projectCount} total</div>
+
+        <div className="mt-10 flex w-full items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Recent projects</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Continue where you left off.
+            </p>
+          </div>
+          <div className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
+            {projectCount} total
+          </div>
         </div>
 
-        <div className="mt-1 w-full">
-          {visibleProjects.map((item, index) => (
+        <div className="mt-4 w-full space-y-2">
+          {visibleProjects.map((project) => (
             <div
-              key={index}
-              className="flex justify-between w-full items-center mt-2"
+              key={project.id}
+              className="flex w-full items-center justify-between gap-4 rounded-xl border border-border bg-card/40 px-4 py-3 transition-colors hover:border-primary/30 hover:bg-primary/5"
             >
-              <div className="flex flex-col gap-0.5 min-w-0 flex-1 mr-4">
-                <span className="text-sm font-medium truncate">{item.name}</span>
+              <div className="mr-4 flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="truncate text-sm font-medium">
+                  {project.name}
+                </span>
                 <div className="text-xs text-muted-foreground">
-                  Created At: {formatCreationTime(item._creationTime)}
+                  Created At: {formatCreationTime(project.createdAt)}
                 </div>
               </div>
-              <div
-                className="flex gap-2
-              "
-              >
+              <div className="flex gap-2">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
-                      size={"icon"}
-                      className="px-3 aspect-square cursor-pointer text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white "
+                      size="icon"
+                      className="aspect-square cursor-pointer bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
                     >
                       <Trash2 />
                     </Button>
@@ -220,29 +243,29 @@ const Page = () => {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete project</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will permanently delete "{item.name}" and its
-                        files.
+                        This will permanently delete &quot;{project.name}&quot; and
+                        its files.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         variant="destructive"
-                        onClick={() => handleDeleteProject(item._id)}
-                        disabled={deletingProjectId === item._id}
+                        onClick={() => handleDeleteProject(project.id)}
+                        disabled={deletingProjectId === project.id}
                       >
-                        {deletingProjectId === item._id
+                        {deletingProjectId === project.id
                           ? "Deleting..."
                           : "Delete"}
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-                <Link href={`/room/${item._id}`}>
+                <Link href={`/room/${project.id}`}>
                   <Button
-                    size={"icon"}
-                    variant={"secondary"} 
-                    className="px-3 aspect-square cursor-pointer text-sm font-medium "
+                    size="icon"
+                    variant="secondary"
+                    className="aspect-square cursor-pointer px-3 text-sm font-medium hover:bg-primary/10 hover:text-primary"
                   >
                     <ArrowUpRight />
                   </Button>
@@ -251,7 +274,8 @@ const Page = () => {
             </div>
           ))}
         </div>
-        {(projects?.length ?? 0) > 5 && (
+
+        {projectCount > 5 && (
           <p className="mt-4 w-full text-xs text-muted-foreground">
             You reached the 5 project limit. Delete a project to create a new
             one.

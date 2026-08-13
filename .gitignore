@@ -21,6 +21,7 @@ node_modules
 
 # production
 /build
+/apps/orin-backend/dist/
 
 # misc
 .DS_Store
@@ -43,7 +44,5 @@ yarn-error.log*
 next-env.d.ts
 
 # clerk configuration (can include secrets)
-/.clerk/
-
-/convex/_generated
-/.agents/
+audit.md 
+ORIN_REVIEW.md

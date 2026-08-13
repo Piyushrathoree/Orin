@@ -4,7 +4,6 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/provider/theme-provider";
 import { ClerkProvider } from "@clerk/nextjs";
-import ConvexClientProvider from "@/provider/convex-client-provider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -17,29 +16,29 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cocursor",
-  description: "Cocursor – Collaborative Coding Platform",
+  title: "Orin",
+  description: "Orin – Collaborative Coding Platform",
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.ico",
+    icon: [{ url: "/Orin-logo.svg", type: "image/svg+xml" }],
+    shortcut: "/Orin-logo.svg",
+    apple: "/Orin-logo.svg",
   },
   openGraph: {
-    title: "Cocursor",
-    description: "Cocursor – Collaborative Coding Platform",
+    title: "Orin",
+    description: "Orin – Collaborative Coding Platform",
     images: [
       {
         url: "https://res.cloudinary.com/dz12pywzs/image/upload/v1770130073/Copy_of_Webinar_Keynote_Presentation_1_g0bs5i.png",
         width: 1200,
         height: 630,
-        alt: "Cocursor Logo",
+        alt: "Orin Logo",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Cocursor",
-    description: "Cocursor – Collaborative Coding Platform",
+    title: "Orin",
+    description: "Orin – Collaborative Coding Platform",
     images: [
       "https://res.cloudinary.com/dz12pywzs/image/upload/v1770130073/Copy_of_Webinar_Keynote_Presentation_1_g0bs5i.png",
     ],
@@ -54,23 +53,23 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="apple-touch-icon" href="/favicon.ico" />
-        <meta name="application-name" content="Cocursor" />
+        <link rel="icon" type="image/svg+xml" href="/Orin-logo.svg" />
+        <link rel="apple-touch-icon" href="/Orin-logo.svg" />
+        <meta name="application-name" content="Orin" />
         <meta
           property="og:image"
           content="https://res.cloudinary.com/dz12pywzs/image/upload/v1770130073/Copy_of_Webinar_Keynote_Presentation_1_g0bs5i.png"
         />
-        <meta property="og:title" content="Cocursor" />
+        <meta property="og:title" content="Orin" />
         <meta
           property="og:description"
-          content="Cocursor – Collaborative Coding Platform"
+          content="Orin – Collaborative Coding Platform"
         />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Cocursor" />
+        <meta name="twitter:title" content="Orin" />
         <meta
           name="twitter:description"
-          content="Cocursor – Collaborative Coding Platform"
+          content="Orin – Collaborative Coding Platform"
         />
         <meta
           name="twitter:image"
@@ -78,15 +77,18 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${geistMono.variable} antialiased bg-black dark`}
+        className={`${inter.variable} ${geistMono.variable} antialiased bg-background`}
       >
         <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up">
-          <ConvexClientProvider>
-            <ThemeProvider attribute="class" disableTransitionOnChange>
-              <Toaster />
-              {children}
-            </ThemeProvider>
-          </ConvexClientProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem={false}
+            disableTransitionOnChange
+          >
+            <Toaster />
+            {children}
+          </ThemeProvider>
         </ClerkProvider>
       </body>
     </html>

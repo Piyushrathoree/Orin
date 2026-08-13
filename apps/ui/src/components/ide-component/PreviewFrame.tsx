@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 interface PreviewFrameProps {
   url: string;
   device: "desktop" | "tablet" | "mobile";
+  refreshKey: number;
 }
 
 const deviceConfigs = {
@@ -26,7 +27,7 @@ const deviceConfigs = {
   },
 };
 
-const PreviewFrame: React.FC<PreviewFrameProps> = ({ url, device }) => {
+const PreviewFrame: React.FC<PreviewFrameProps> = ({ url, device, refreshKey }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -93,6 +94,7 @@ const PreviewFrame: React.FC<PreviewFrameProps> = ({ url, device }) => {
         className="relative overflow-hidden"
       >
         <iframe
+          key={refreshKey}
           src={url}
           className="w-full h-full border-0 bg-white"
           title="Preview"

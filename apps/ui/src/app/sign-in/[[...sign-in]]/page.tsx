@@ -98,7 +98,7 @@ export default function SignInPage() {
               <Logo />
             </Link>
             <h1 className="mb-1 mt-4 text-xl font-semibold text-white">
-              Sign In to Cocursor
+              Sign In to Orin
             </h1>
             <p className="text-zinc-400">Welcome back! Sign in to continue</p>
           </div>
@@ -173,7 +173,7 @@ export default function SignInPage() {
 
                 <Button
                   type="submit"
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                  className="w-full bg-primary text-primary-foreground hover:bg-primary-dark"
                   disabled={isLoading}
                 >
                   {isLoading ? "Sending code..." : "Continue"}
@@ -204,7 +204,7 @@ export default function SignInPage() {
 
               <Button
                 type="submit"
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary-dark"
                 disabled={isLoading}
               >
                 {isLoading ? "Verifying..." : "Verify"}
@@ -227,7 +227,7 @@ export default function SignInPage() {
 
           <p className="text-zinc-400 text-center text-sm mt-6">
             Don&apos;t have an account?
-            <Button asChild variant="link" className="px-2 text-orange-400">
+            <Button asChild variant="link" className="px-2 text-primary">
               <Link href="/sign-up">Create account</Link>
             </Button>
           </p>
