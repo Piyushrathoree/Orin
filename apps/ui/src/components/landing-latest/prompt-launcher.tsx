@@ -53,7 +53,7 @@ export function PromptLauncher() {
     <div
       className={cn(
         "relative z-10 mt-5 w-full max-w-xl overflow-hidden rounded-2xl",
-        "border border-white/10 bg-background/75 text-left shadow-2xl backdrop-blur-md",
+        "border border-border bg-background/75 text-left shadow-lg backdrop-blur-md dark:shadow-2xl",
       )}
     >
       <Textarea
@@ -77,7 +77,7 @@ export function PromptLauncher() {
               className={cn(
                 "inline-flex items-center gap-1 rounded-full px-2.5 py-1",
                 "text-xs text-muted-foreground/70 transition-colors",
-                "hover:bg-white/5 hover:text-muted-foreground",
+                "hover:bg-muted/60 hover:text-muted-foreground",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               )}
               aria-label={`Model and options: ${triggerLabel}`}
@@ -89,7 +89,7 @@ export function PromptLauncher() {
           <PopoverContent
             align="start"
             side="top"
-            className="w-56 rounded-xl border-white/10 bg-background/95 p-0 shadow-xl backdrop-blur-md"
+            className="w-56 rounded-xl border-border bg-background/95 p-0 shadow-xl backdrop-blur-md"
           >
             <PopoverTitle className="sr-only">Model and options</PopoverTitle>
             <div className="p-3">

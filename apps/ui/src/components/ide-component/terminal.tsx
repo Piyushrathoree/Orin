@@ -5,11 +5,72 @@ import { useIDEStore } from "@/stores/ideStore";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
-import { Terminal as TerminalIcon, X, Maximize2, Trash2, Folder } from "lucide-react";
+import { X, Maximize2, Trash2, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "motion/react";
+import { useTheme } from "next-themes";
 
-const TerminalComponent: React.FC = () => {
+interface TerminalComponentProps {
+  onClose?: () => void;
+  onMaximize?: () => void;
+}
+
+function getTerminalTheme(isDark: boolean) {
+  if (isDark) {
+    return {
+      background: "#101214",
+      foreground: "#dce6e2",
+      cursor: "#6FFFD2",
+      selectionBackground: "#3e4451",
+      black: "#000000",
+      red: "#ff5555",
+      green: "#50fa7b",
+      yellow: "#f1fa8c",
+      blue: "#bd93f9",
+      magenta: "#ff79c6",
+      cyan: "#8be9fd",
+      white: "#bfbfbf",
+      brightBlack: "#4d4d4d",
+      brightRed: "#ff6e6e",
+      brightGreen: "#69ff94",
+      brightYellow: "#ffffa5",
+      brightBlue: "#d6acff",
+      brightMagenta: "#ff92df",
+      brightCyan: "#a4ffff",
+      brightWhite: "#e6e6e6",
+    };
+  }
+
+  return {
+    background: "#ffffff",
+    foreground: "#383838",
+    cursor: "#0d9488",
+    selectionBackground: "#b4d7ff",
+    black: "#000000",
+    red: "#cd3131",
+    green: "#00bc00",
+    yellow: "#949800",
+    blue: "#0451a5",
+    magenta: "#bc05bc",
+    cyan: "#0598bc",
+    white: "#555555",
+    brightBlack: "#666666",
+    brightRed: "#cd3131",
+    brightGreen: "#14ce14",
+    brightYellow: "#b5ba00",
+    brightBlue: "#0451a5",
+    brightMagenta: "#bc05bc",
+    brightCyan: "#0598bc",
+    brightWhite: "#a5a5a5",
+  };
+}
+
+const TerminalComponent: React.FC<TerminalComponentProps> = ({
+  onClose,
+  onMaximize,
+}) => {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme !== "light";
   const {
     webContainerRef,
     isContainerBooted,
@@ -55,7 +116,7 @@ const TerminalComponent: React.FC = () => {
       projectDirectoryRef.current = cwd;
 
       // Start an interactive shell in the project directory
-      const shellProcess = await webContainerRef.current.spawn("jsh", {
+      const shellProcess = await webContainerRef.current.spawn("jsh", [], {
         terminal: {
           cols: terminal.cols,
           rows: terminal.rows,
@@ -161,28 +222,7 @@ const TerminalComponent: React.FC = () => {
       cursorBlink: true,
       fontSize: 13,
       fontFamily: "var(--font-geist-mono), 'Cascadia Code', 'Consolas', monospace",
-      theme: {
-        background: "#0a0a0a",
-        foreground: "#d4d4d4",
-        cursor: "#d4d4d4",
-        selectionBackground: "#3e4451",
-        black: "#000000",
-        red: "#ff5555",
-        green: "#50fa7b",
-        yellow: "#f1fa8c",
-        blue: "#bd93f9",
-        magenta: "#ff79c6",
-        cyan: "#8be9fd",
-        white: "#bfbfbf",
-        brightBlack: "#4d4d4d",
-        brightRed: "#ff6e6e",
-        brightGreen: "#69ff94",
-        brightYellow: "#ffffa5",
-        brightBlue: "#d6acff",
-        brightMagenta: "#ff92df",
-        brightCyan: "#a4ffff",
-        brightWhite: "#e6e6e6",
-      },
+      theme: getTerminalTheme(isDark),
       allowTransparency: false,
       cursorStyle: "block",
       cursorWidth: 2,
@@ -236,7 +276,13 @@ const TerminalComponent: React.FC = () => {
       term.dispose();
       termRef.current = null;
     };
-  }, [isContainerBooted]);
+  }, [isContainerBooted, isDark]);
+
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = getTerminalTheme(isDark);
+    }
+  }, [isDark]);
 
   const clearTerminal = () => {
     termRef.current?.clear();
@@ -244,66 +290,71 @@ const TerminalComponent: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0a0a] border-t border-white/5 overflow-hidden group/term relative rounded-none">
-      <div className="flex items-center justify-between px-4 py-1.5 bg-[#0d0d0d] border-b border-white/5 select-none shrink-0 rounded-none">
+    <div className="group/term relative flex h-full flex-col overflow-hidden rounded-none bg-background">
+      <div className="flex h-8 shrink-0 select-none items-center justify-between border-b border-border bg-sidebar px-3">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-none bg-white/5 border border-white/10">
-            <TerminalIcon className="w-3.5 h-3.5 text-neutral-400" />
-            <span className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">Terminal</span>
-          </div>
-          <div className="h-4 w-[1px] bg-white/10 mx-1" />
-          <span className="text-[11px] text-neutral-500 font-medium italic">node — jsh</span>
+          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
+            Terminal
+          </span>
+          <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] text-muted-foreground/70">
+            jsh
+          </span>
         </div>
-        
-        <div className="flex items-center gap-1 opacity-60 group-hover/term:opacity-100 transition-opacity">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6 text-neutral-400 rounded-none"
+
+        <div className="flex items-center gap-0.5 opacity-60 transition-opacity group-hover/term:opacity-100">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground"
             onClick={clearTerminal}
             title="Clear Terminal"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="size-3.5" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6 text-neutral-400 rounded-none"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground"
+            onClick={onMaximize}
+            title="Maximize Terminal"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
+            <Maximize2 className="size-3.5" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-6 w-6 rounded-none text-neutral-400"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground"
+            onClick={onClose}
+            title="Close Terminal"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="size-3.5" />
           </Button>
         </div>
       </div>
 
-      {/* Suggestion Overlay */}
       <AnimatePresence>
         {showSuggestions && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-12 left-6 z-50 bg-[#161616] border border-white/10 rounded-none shadow-2xl p-1 min-w-[200px]"
+            className="absolute bottom-12 left-6 z-50 min-w-[200px] border border-border bg-popover p-1 shadow-xl"
           >
-            <div className="px-2 py-1 text-[10px] font-bold text-neutral-500 uppercase tracking-widest border-b border-white/5 mb-1 flex items-center gap-2">
-              <Folder size={10} className="text-neutral-400" />
+            <div className="mb-1 flex items-center gap-2 border-b border-border px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60">
+              <Folder size={10} className="text-muted-foreground" />
               Suggestions
             </div>
             {suggestions.map((dir, i) => (
               <button
                 key={dir}
                 onClick={() => handleSuggestionClick(dir)}
-                className={`w-full text-left px-3 py-1.5 text-xs rounded-none flex items-center gap-2 transition-colors ${
-                  i === selectedIndex ? "bg-white/10 text-white" : "text-neutral-300 hover:bg-white/5"
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                  i === selectedIndex
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50"
                 }`}
               >
-                <Folder size={12} className={i === selectedIndex ? "text-white" : "text-neutral-500"} />
+                <Folder size={12} className={i === selectedIndex ? "text-foreground" : "text-muted-foreground"} />
                 {dir}
               </button>
             ))}
@@ -311,13 +362,13 @@ const TerminalComponent: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <div className="flex-1 w-full bg-[#0a0a0a] relative overflow-hidden rounded-none">
-        <div 
-          ref={terminalRef} 
-          className="w-full h-full p-2 xterm-container rounded-none"
+      <div className="relative w-full flex-1 overflow-hidden bg-background">
+        <div
+          ref={terminalRef}
+          className="xterm-container h-full w-full p-2"
         />
       </div>
-      
+
       <style jsx global>{`
         .xterm-container .xterm-viewport {
           background-color: transparent !important;

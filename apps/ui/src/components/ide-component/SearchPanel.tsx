@@ -4,8 +4,7 @@ import React, { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileSystemTree } from "@webcontainer/api";
-import { File, Search, ChevronRight, Hash } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Search } from "lucide-react";
 import { FileIconCustom } from "./file-icon";
 
 interface SearchResult {
@@ -91,16 +90,18 @@ const SearchPanel = ({ fileStructure, onFileClick }: SearchPanelProps) => {
   }, [results]);
 
   return (
-    <div className="h-full flex flex-col bg-muted/30">
-      <div className="px-4 py-3 font-semibold text-sm border-b flex items-center justify-between">
-        <span>Search</span>
+    <div className="flex h-full flex-col bg-sidebar">
+      <div className="flex h-9 shrink-0 items-center border-b border-border px-3">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
+          Search
+        </span>
       </div>
-      <div className="p-4 space-y-4">
+      <div className="border-b border-border px-3 py-2">
         <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-2 size-3.5 text-muted-foreground" />
           <Input
             placeholder="Search files and content..."
-            className="pl-9 h-9"
+            className="h-7 border-border bg-background/50 pl-8 text-xs shadow-none"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
@@ -110,35 +111,35 @@ const SearchPanel = ({ fileStructure, onFileClick }: SearchPanelProps) => {
 
       <ScrollArea className="flex-1">
         {query && results.length === 0 ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">
+          <div className="p-4 text-center text-xs text-muted-foreground">
             No results found for "{query}"
           </div>
         ) : (
-          <div className="px-2 pb-4">
+          <div className="py-1">
             {Object.entries(groupedResults).map(([path, fileResults]) => (
-              <div key={path} className="mb-2">
+              <div key={path}>
                 <button
                   onClick={() => onFileClick(path, fileResults[0].name)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md text-sm text-left group"
+                  className="group flex h-6 w-full items-center gap-1.5 px-2 text-left text-[13px] hover:bg-accent"
                 >
-                  <FileIconCustom filename={path.split('/').pop() || ''} className="h-4 w-4 shrink-0" />
-                  <span className="truncate flex-1">{path}</span>
-                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                  <FileIconCustom filename={path.split("/").pop() || ""} className="size-3.5" />
+                  <span className="flex-1 truncate">{path}</span>
+                  <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
                     {fileResults.length}
                   </span>
                 </button>
-                <div className="ml-4 space-y-1">
+                <div>
                   {fileResults.map((res, i) =>
                     res.matchType === "content" ? (
                       <button
                         key={`${path}-${i}`}
                         onClick={() => onFileClick(path, res.name)}
-                        className="w-full flex items-start gap-2 px-2 py-1 hover:bg-accent/50 rounded text-[11px] text-left text-muted-foreground"
+                        className="flex w-full items-start gap-2 px-2 py-0.5 pl-8 text-left text-[11px] text-muted-foreground hover:bg-accent/50"
                       >
-                        <span className="text-zinc-500 shrink-0 tabular-nums">
+                        <span className="shrink-0 tabular-nums text-muted-foreground/50">
                           {res.line}:
                         </span>
-                        <span className="line-clamp-1 italic truncate">
+                        <span className="line-clamp-1 truncate italic">
                           {res.preview}
                         </span>
                       </button>

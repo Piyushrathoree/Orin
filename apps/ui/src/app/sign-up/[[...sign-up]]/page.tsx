@@ -83,17 +83,17 @@ export default function SignUpPage() {
   };
 
   return (
-    <section className="flex min-h-screen bg-zinc-950 px-4 py-16 md:py-32">
+    <section className="flex min-h-screen bg-background px-4 py-16 md:py-32">
       <div className="max-w-sm m-auto h-fit w-full">
-        <div className="p-6 rounded-xl border border-zinc-800 bg-zinc-900/50">
+        <div className="p-6 rounded-xl border border-border bg-card/80">
           <div>
             <Link href="/" aria-label="go home">
               <Logo />
             </Link>
-            <h1 className="mb-1 mt-4 text-xl font-semibold text-white">
+            <h1 className="mb-1 mt-4 text-xl font-semibold text-foreground">
               Create your account
             </h1>
-            <p className="text-zinc-400">Get started with Orin</p>
+            <p className="text-muted-foreground">Get started with Orin</p>
           </div>
 
           {error && (
@@ -108,7 +108,7 @@ export default function SignUpPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-white"
+                  className="w-full"
                   onClick={handleGoogleSignUp}
                 >
                   <svg
@@ -139,16 +139,16 @@ export default function SignUpPage() {
               </div>
 
               <div className="my-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <hr className="border-zinc-700 border-dashed" />
-                <span className="text-zinc-500 text-xs">Or continue with</span>
-                <hr className="border-zinc-700 border-dashed" />
+                <hr className="border-border border-dashed" />
+                <span className="text-muted-foreground text-xs">Or continue with</span>
+                <hr className="border-border border-dashed" />
               </div>
 
               <form onSubmit={handleEmailSignUp} className="space-y-6">
                 <div className="space-y-2">
                   <Label
                     htmlFor="email"
-                    className="block text-sm text-zinc-300"
+                    className="block text-sm text-foreground"
                   >
                     Email
                   </Label>
@@ -159,7 +159,6 @@ export default function SignUpPage() {
                     id="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
                     placeholder="you@example.com"
                   />
                 </div>
@@ -175,12 +174,12 @@ export default function SignUpPage() {
             </>
           ) : (
             <form onSubmit={handleVerification} className="mt-6 space-y-6">
-              <p className="text-zinc-400 text-sm">
+              <p className="text-muted-foreground text-sm">
                 We sent a verification code to{" "}
-                <span className="text-white font-medium">{email}</span>
+                <span className="text-foreground font-medium">{email}</span>
               </p>
               <div className="space-y-2">
-                <Label htmlFor="code" className="block text-sm text-zinc-300">
+                <Label htmlFor="code" className="block text-sm text-foreground">
                   Verification Code
                 </Label>
                 <Input
@@ -190,7 +189,6 @@ export default function SignUpPage() {
                   id="code"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  className="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500"
                   placeholder="Enter code"
                 />
               </div>
@@ -206,7 +204,7 @@ export default function SignUpPage() {
               <Button
                 type="button"
                 variant="ghost"
-                className="w-full text-zinc-400 hover:text-white"
+                className="w-full text-muted-foreground hover:text-foreground"
                 onClick={() => {
                   setPendingVerification(false);
                   setCode("");
@@ -218,7 +216,7 @@ export default function SignUpPage() {
             </form>
           )}
 
-          <p className="text-zinc-400 text-center text-sm mt-6">
+          <p className="text-muted-foreground text-center text-sm mt-6">
             Already have an account?
             <Button asChild variant="link" className="px-2 text-primary">
               <Link href="/sign-in">Sign in</Link>

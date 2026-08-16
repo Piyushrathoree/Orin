@@ -82,8 +82,8 @@ export default function RootLayout({
         <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up">
           <ThemeProvider
             attribute="class"
-            defaultTheme="dark"
-            enableSystem={false}
+            defaultTheme="system"
+            enableSystem
             disableTransitionOnChange
           >
             <Toaster />

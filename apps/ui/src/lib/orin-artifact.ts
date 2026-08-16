@@ -7,7 +7,8 @@ export interface OrinFile {
 
 export type OrinAction =
   | { type: "file"; path: string; content: string }
-  | { type: "delete"; path: string };
+  | { type: "delete"; path: string }
+  | { type: "shell"; command: string };
 
 function normalizeFilePath(path: string): string | null {
   const normalizedPath = path.trim();
@@ -36,6 +37,15 @@ export function parseOrinActions(response: string): OrinAction[] {
   for (const match of response.matchAll(actionPattern)) {
     const attributes = match[1] ?? "";
     const type = attributes.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1];
+
+    if (type === "shell") {
+      const command = (match[2] ?? "").trim();
+      if (command) {
+        actions.push({ type: "shell", command });
+      }
+      continue;
+    }
+
     const rawPath = attributes.match(
       /\b(?:filePath|path)\s*=\s*["']([^"']+)["']/i,
     )?.[1];
@@ -169,7 +179,11 @@ export function applyOrinActions(
       return mergeFileTrees(updatedTree, filesToTree([action]));
     }
 
-    return removeFileFromTree(updatedTree, action.path.split("/"));
+    if (action.type === "delete") {
+      return removeFileFromTree(updatedTree, action.path.split("/"));
+    }
+
+    return updatedTree;
   }, tree);
 }
 

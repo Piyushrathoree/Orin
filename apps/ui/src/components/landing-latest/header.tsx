@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { SignedIn, SignedOut } from "@clerk/nextjs"
 import { Menu } from "lucide-react"
 import Link from "next/link"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 function AuthCta({ className }: { className?: string }) {
   const buttonClass = [
@@ -54,7 +55,14 @@ export function Header() {
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-1">
-            <Image src="/Orin-logo.svg" alt="Orin logo" width={32} height={32} priority />
+            <Image
+              src="/Orin-logo.svg"
+              alt="Orin logo"
+              width={32}
+              height={32}
+              className="invert dark:invert-0"
+              priority
+            />
             <span className="text-foreground text-xl font-semibold">Orin</span>
           </div>
           <nav className="hidden md:flex items-center gap-2">
@@ -70,7 +78,8 @@ export function Header() {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <ThemeToggle className="hidden md:inline-flex" />
           <AuthCta className="hidden md:inline-flex" />
           <Sheet>
             <SheetTrigger asChild className="md:hidden">
@@ -95,6 +104,7 @@ export function Header() {
                   </Link>
                 ))}
                 <AuthCta className="mt-4 w-full" />
+                <ThemeToggle className="mt-2 self-start" />
               </nav>
             </SheetContent>
           </Sheet>

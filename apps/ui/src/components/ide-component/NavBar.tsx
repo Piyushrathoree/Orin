@@ -5,13 +5,12 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { File, X, Eye, Code, Monitor, Tablet, Smartphone } from "lucide-react";
-import { ButtonGroup } from "@/components/ui/button-group";
+import { X, Eye, Code, Monitor, Tablet, Smartphone } from "lucide-react";
 import { motion } from "motion/react";
-import OrangeButton from "../landing/button/orange-button";
-import { SignedIn, UserButton } from "@clerk/nextjs";
 import ExportGithubDialog from "./export-github";
+import { FileIconCustom } from "./file-icon";
 import { FileSystemTree } from "@webcontainer/api";
+import { cn } from "@/lib/utils";
 
 interface TabInfo {
   id: string;
@@ -47,14 +46,6 @@ const NavBar: React.FC<NavBarProps> = ({
   currentTabId,
   setCurrentTabId,
   handleCloseTab,
-  showAiChat,
-  setShowAiChat,
-  showExplorer,
-  setShowExplorer,
-  showTerminal,
-  setShowTerminal,
-  handleSaveCurrentFile,
-  liveUrl,
   activeTab = "code",
   setActiveTab = () => {},
   previewDevice = "desktop",
@@ -69,72 +60,78 @@ const NavBar: React.FC<NavBarProps> = ({
   ] as const;
 
   return (
-    <div className="flex items-center justify-between pr-2 bg-muted/30 h-[49px] border-b">
-      <div className="flex items-center overflow-x-auto flex-1 h-full hide-scrollbar">
-        {openTabs.length === 0
-          ? ""
-          : openTabs.map((tab) => (
-              <div
-                key={tab.id}
-                className={`group relative flex items-center gap-1.5 px-3 h-full text-sm cursor-pointer transition-all border-t-2 ${
-                  currentTabId === tab.id
-                    ? "bg-background text-foreground border-t-[#FA6000]"
-                    : "bg-transparent text-muted-foreground border-t-transparent hover:bg-accent/50 hover:text-foreground"
-                }`}
-                onClick={() => setCurrentTabId(tab.id)}
+    <div className="flex h-9 shrink-0 items-center justify-between border-b border-border bg-sidebar pr-2">
+      <div className="hide-scrollbar flex h-full flex-1 items-center overflow-x-auto">
+        {openTabs.map((tab) => {
+          const isActive = currentTabId === tab.id;
+          return (
+            <div
+              key={tab.id}
+              className={cn(
+                "group relative flex h-full cursor-pointer items-center gap-1.5 border-t px-3 text-[13px] transition-colors",
+                isActive
+                  ? "border-t-primary bg-background text-foreground"
+                  : "border-t-transparent bg-transparent text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+              )}
+              onClick={() => setCurrentTabId(tab.id)}
+            >
+              <FileIconCustom filename={tab.name} className="size-3.5 shrink-0" />
+              <span
+                className={cn(
+                  "max-w-[150px] truncate",
+                  tab.isDirty && "text-amber-400",
+                )}
               >
-                <File
-                  size={14}
-                  className={`shrink-0 transition-colors ${
-                    currentTabId === tab.id
-                      ? "text-foreground"
-                      : "text-muted-foreground"
-                  }`}
-                />
-                <span className={`truncate max-w-[150px] transition-colors ${
-                  tab.isDirty ? "text-amber-400" : ""
-                }`}>
-                  {tab.name}
-                </span>
-                <X
-                  size={14}
-                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCloseTab(tab.id);
-                  }}
-                />
-              </div>
-            ))}
+                {tab.name}
+              </span>
+              <button
+                type="button"
+                aria-label={`Close ${tab.name}`}
+                className={cn(
+                  "shrink-0 text-muted-foreground hover:text-foreground",
+                  isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCloseTab(tab.id);
+                }}
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          );
+        })}
       </div>
-      <div className="flex items-center gap-2 ml-2 h-full">
-        <ButtonGroup className="border rounded-md overflow-hidden">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setActiveTab("preview")}
-            className={`text-xs rounded-none ${
-              activeTab === "preview" ? "bg-accent" : ""
-            }`}
-          >
-            <Eye className="h-3 w-3 mr-1" />
-            Preview
-          </Button>
+      <div className="ml-2 flex h-full items-center gap-1.5">
+        <div className="flex h-7 items-center rounded-md bg-muted p-0.5">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setActiveTab("code")}
-            className={`text-xs rounded-none ${
-              activeTab === "code" ? "bg-accent" : ""
-            }`}
+            className={cn(
+              "h-6 rounded-sm px-2 text-xs shadow-none",
+              activeTab === "code" && "bg-accent shadow-xs",
+            )}
           >
-            <Code className="h-3 w-3 mr-1" />
+            <Code className="mr-1 size-3" />
             Code
           </Button>
-        </ButtonGroup>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setActiveTab("preview")}
+            className={cn(
+              "h-6 rounded-sm px-2 text-xs shadow-none",
+              activeTab === "preview" && "bg-accent shadow-xs",
+            )}
+          >
+            <Eye className="mr-1 size-3" />
+            Preview
+          </Button>
+        </div>
 
         {activeTab === "preview" && (
-          <div className="flex items-center border rounded-md overflow-hidden h-8">
+          <div className="flex h-7 items-center rounded-md bg-muted p-0.5">
             {devices.map((device) => {
               const Icon = device.icon;
               const isActive = previewDevice === device.id;
@@ -142,18 +139,20 @@ const NavBar: React.FC<NavBarProps> = ({
                 <Tooltip key={device.id}>
                   <TooltipTrigger asChild>
                     <button
+                      type="button"
                       onClick={() => setPreviewDevice(device.id)}
-                      className={`relative px-2 h-10 transition-colors flex items-center justify-center ${
+                      className={cn(
+                        "relative flex h-6 items-center justify-center px-1.5 transition-colors",
                         isActive
-                          ? "bg-accent text-foreground"
-                          : "text-muted-foreground hover:bg-accent/50"
-                      }`}
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
                     >
-                      <Icon className="h-4 w-4 relative z-10" />
+                      <Icon className="relative z-10 size-3.5" />
                       {isActive && (
                         <motion.div
                           layoutId="activeDevicePill"
-                          className="absolute inset-0 bg-accent z-0"
+                          className="absolute inset-0 z-0 rounded-sm bg-accent"
                           transition={{
                             type: "spring",
                             stiffness: 300,
@@ -174,8 +173,8 @@ const NavBar: React.FC<NavBarProps> = ({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <ExportGithubDialog 
-              fileStructure={fileStructure} 
+            <ExportGithubDialog
+              fileStructure={fileStructure}
               projectName={projectName}
             />
           </TooltipTrigger>

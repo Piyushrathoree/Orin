@@ -8,7 +8,7 @@ const Logo = () => {
         alt="Orin logo"
         width={40}
         height={40}
-        className="h-10 w-10"
+        className="h-10 w-10 invert dark:invert-0"
         priority
       />
       <span className="text-2xl font-semibold text-foreground">Orin</span>

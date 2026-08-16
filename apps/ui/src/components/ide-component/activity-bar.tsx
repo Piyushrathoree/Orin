@@ -1,26 +1,64 @@
 "use client";
 
-import React, { useState } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { SignedIn, UserButton } from "@clerk/nextjs";
 import { File, Search, Terminal, BotMessageSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type SidebarProps = {
   showExplorer: boolean;
-  setShowExplorer: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowExplorer: Dispatch<SetStateAction<boolean>>;
   showSearch: boolean;
-  setShowSearch: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowSearch: Dispatch<SetStateAction<boolean>>;
   showTerminal: boolean;
-  setShowTerminal: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowTerminal: Dispatch<SetStateAction<boolean>>;
   showAiChat: boolean;
-  setShowAiChat: React.Dispatch<React.SetStateAction<boolean>>;
+  setShowAiChat: Dispatch<SetStateAction<boolean>>;
 };
+
+function ActivityButton({
+  active,
+  onClick,
+  label,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={label}
+          aria-pressed={active}
+          className={cn(
+            "relative flex h-10 w-full items-center justify-center",
+            "text-muted-foreground/50 transition-colors hover:text-foreground",
+            active && "text-primary",
+          )}
+        >
+          {active && (
+            <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" />
+          )}
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 const ActivityBar = ({
   showExplorer,
@@ -33,97 +71,70 @@ const ActivityBar = ({
   setShowAiChat,
 }: SidebarProps) => {
   return (
-    <div className=" border-r p-2 z-50 flex flex-col justify-between">
-      <div className="flex flex-col gap-2">
-        <Link href="/" className=" flex justify-center items-center my-1 mt-2">
-          <svg
-            width="25"
-            height="25"
-            viewBox="0 0 87 91"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M47.1643 21.4431L1.51616 34.7167C0.385676 35.0454 0.305338 36.6102 1.39625 37.0521L21.7132 45.2821C22.083 45.4319 22.358 45.7495 22.4525 46.1357L28.1896 69.5876C28.4777 70.7653 30.1174 70.8716 30.5564 69.741L48.6718 23.0781C49.0431 22.1215 48.1526 21.1557 47.1643 21.4431Z"
-              fill="#ffffff"
-              strokeWidth="1.14286"
-            />
-            <path
-              d="M39.811 69.2416L85.4341 55.8831C86.564 55.5523 86.6415 53.9874 85.5497 53.5476L65.2175 45.3554C64.8473 45.2063 64.5717 44.8891 64.4765 44.5029L58.6954 21.0619C58.4051 19.8847 56.7653 19.7815 56.3284 20.9129L38.3004 67.6093C37.9309 68.5666 38.8231 69.5308 39.811 69.2416Z"
-              fill="#ffffff"
-              strokeWidth="1.14286"
-            />
-          </svg>
+    <div className="z-50 flex h-full w-12 shrink-0 flex-col justify-between border-r border-border bg-sidebar py-2">
+      <div className="flex flex-col items-stretch gap-1">
+        <Link
+          href="/"
+          className="mb-1 flex h-10 items-center justify-center"
+          aria-label="Orin home"
+        >
+          <Image
+            src="/Orin-logo.svg"
+            alt="Orin logo"
+            width={20}
+            height={20}
+            className="size-5 invert dark:invert-0"
+            priority
+          />
         </Link>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={showExplorer ? "ghost" : "ghost"}
-              size="icon"
-              onClick={() => {
-                setShowExplorer((prev) => !prev);
-                if (!showExplorer) setShowSearch(false);
-              }}
-              className={`cursor-pointer ${showExplorer ? "[&_svg]:text-[#FA6000]" : ""}`}
-            >
-              <File />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Explorer (Ctrl+B)</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={showSearch ? "ghost" : "ghost"}
-              size="icon"
-              onClick={() => {
-                setShowSearch((prev) => !prev);
-                if (!showSearch) setShowExplorer(false);
-              }}
-              className={`cursor-pointer ${showSearch ? "[&_svg]:text-[#FA6000]" : ""}`}
-            >
-              <Search />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Search (Ctrl+Shift+F)</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={showTerminal ? "ghost" : "ghost"}
-              size="icon"
-              onClick={() => setShowTerminal((prev) => !prev)}
-              className={`cursor-pointer ${showTerminal ? "[&_svg]:text-[#FA6000]" : ""}`}
-            >
-              <Terminal />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Terminal (Ctrl+`)</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={showAiChat ? "ghost" : "ghost"}
-              size="icon"
-              onClick={() => setShowAiChat((prev) => !prev)}
-              className={`cursor-pointer ${showAiChat ? "[&_svg]:text-[#FA6000]" : ""}`}
-            >
-              <BotMessageSquare />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">AI Chat (Ctrl+Shift+A)</TooltipContent>
-        </Tooltip>
+        <ActivityButton
+          active={showExplorer}
+          label="Explorer (Ctrl+B)"
+          onClick={() => {
+            setShowExplorer((prev) => !prev);
+            if (!showExplorer) setShowSearch(false);
+          }}
+        >
+          <File className="size-5" />
+        </ActivityButton>
+        <ActivityButton
+          active={showSearch}
+          label="Search (Ctrl+Shift+F)"
+          onClick={() => {
+            setShowSearch((prev) => !prev);
+            if (!showSearch) setShowExplorer(false);
+          }}
+        >
+          <Search className="size-5" />
+        </ActivityButton>
+        <ActivityButton
+          active={showTerminal}
+          label="Terminal (Ctrl+`)"
+          onClick={() => setShowTerminal((prev) => !prev)}
+        >
+          <Terminal className="size-5" />
+        </ActivityButton>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className=" flex justify-center items-center">
+      <div className="flex flex-col items-stretch gap-1">
+        <ActivityButton
+          active={showAiChat}
+          label="AI Chat (Ctrl+Shift+A)"
+          onClick={() => setShowAiChat((prev) => !prev)}
+        >
+          <BotMessageSquare className="size-5" />
+        </ActivityButton>
+        <div className="flex h-10 items-center justify-center">
+          <ThemeToggle />
+        </div>
+        <div className="flex h-10 items-center justify-center">
           <SignedIn>
             <UserButton
               afterSignOutUrl="/"
               appearance={{
                 elements: {
-                  userButtonAvatarBox: "w-12 h-12",
-                  userButtonTrigger: "w-12 h-12",
+                  userButtonAvatarBox: "size-7",
+                  userButtonTrigger: "size-7",
                 },
               }}
             />

@@ -150,24 +150,24 @@ const ExportGithubDialog = ({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button className="text-xs h-[34px] bg-orange-600 hover:bg-orange-700 text-white">
-          <Github />
-          Export To GitHub
+        <Button variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+          <Github className="size-3.5" />
+          Export
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-background border-zinc-800">
+      <DialogContent className="sm:max-w-[425px] bg-background border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Github className="size-6" />
             Export to GitHub
           </DialogTitle>
-          <div className="text-sm text-zinc-400 mt-2 space-y-2">
+          <div className="text-sm text-muted-foreground mt-2 space-y-2">
             <p>This will create a new repository and upload your project files.</p>
-            <div className="bg-zinc-900/50 p-3 rounded-lg border border-zinc-700/50 space-y-2">
-              <p className="font-medium text-zinc-200 text-xs uppercase tracking-wider">Required Token Permissions:</p>
+            <div className="bg-muted/50 p-3 rounded-lg border border-border space-y-2">
+              <p className="font-medium text-foreground text-xs uppercase tracking-wider">Required Token Permissions:</p>
               <ul className="text-[11px] list-disc pl-4 space-y-1">
-                <li><span className="text-orange-400 font-medium">Classic Token:</span> select the <b>'repo'</b> checkbox.</li>
-                <li><span className="text-orange-400 font-medium">Fine-grained Token:</span> must have <b>'All Repositories'</b> access and <b>'Administration'</b> + <b>'Contents'</b> Write permissions.</li>
+                <li><span className="text-primary font-medium">Classic Token:</span> select the <b>'repo'</b> checkbox.</li>
+                <li><span className="text-primary font-medium">Fine-grained Token:</span> must have <b>'All Repositories'</b> access and <b>'Administration'</b> + <b>'Contents'</b> Write permissions.</li>
               </ul>
             </div>
           </div>
@@ -185,7 +185,7 @@ const ExportGithubDialog = ({
               </p>
             </div>
             <div className="flex flex-col w-full gap-2">
-              <Button asChild className="gap-2 bg-white text-black hover:bg-zinc-200">
+              <Button asChild className="gap-2">
                 <a href={exportedUrl} target="_blank" rel="noopener noreferrer">
                   View Repository
                   <ExternalLink className="size-4" />
@@ -205,7 +205,6 @@ const ExportGithubDialog = ({
                 value={repoName}
                 onChange={(e) => setRepoName(e.target.value)}
                 placeholder="my-cocursor-app"
-                className="bg-zinc-950 border-zinc-800  focus:ring-[#FA6000]"
               />
             </div>
             <div className="grid gap-2">
@@ -218,9 +217,8 @@ const ExportGithubDialog = ({
                 value={token}
                 onChange={(e) => setToken(e.target.value.trim())}
                 placeholder="ghp_... or github_pat_..."
-                className="bg-zinc-950 border-zinc-800  focus:ring-[#FA6000]"
               />
-              <p className="text-[11px] text-zinc-500 italic">
+              <p className="text-[11px] text-muted-foreground italic">
                 Tokens are used only for this request and are never stored.
               </p>
             </div>
@@ -233,7 +231,7 @@ const ExportGithubDialog = ({
               type="submit"
               onClick={handleExport}
               disabled={loading}
-              className="bg-[#FA6000] hover:bg-[#FA6000]/90 text-white w-full gap-2"
+              className="w-full gap-2"
             >
               {loading ? (
                 <>

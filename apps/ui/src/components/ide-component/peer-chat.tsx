@@ -1,34 +1,26 @@
 "use client";
 
-import { useRef, useState, KeyboardEvent, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import {
-  Send,
   Video,
   VideoOff,
   Mic,
   MicOff,
-  PhoneOff,
   Upload,
   Download,
-  Paperclip,
   Loader2,
-  Wifi,
   WifiOff,
   FileIcon,
   X,
-  ChevronDown,
   History,
   FileText,
   Clock,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Tooltip,
   TooltipContent,
@@ -43,6 +35,7 @@ import {
   PopoverTitle,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { IdePromptComposer } from "./prompt-composer";
 
 interface SharedFile {
   id: string;
@@ -59,7 +52,6 @@ interface PeerChatProps {
 
 const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
   const [chatPrompt, setChatPrompt] = useState("");
-  const textareaRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [fileHistory, setFileHistory] = useState<SharedFile[]>([]);
@@ -125,13 +117,6 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
     setChatPrompt("");
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handlePromptSubmit();
-    }
-  };
-
   useEffect(() => {
     if (receivedFileUrl) {
       const newFile: SharedFile = {
@@ -189,7 +174,7 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
     localStream && localStream.getTracks().length > 0;
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="relative flex h-full flex-col overflow-hidden">
       <div className="flex items-center gap-1 px-3 py-1.5 border-b bg-muted/40 shrink-0">
         <div className="flex items-center gap-2">
           {peerConnected ? (
@@ -237,9 +222,9 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
                       <div key={file.id} className="p-3 hover:bg-muted/50 transition-colors flex items-center gap-3 group">
                         <div className={cn(
                           "size-8 rounded flex items-center justify-center shrink-0 shadow-xs border",
-                          file.type === "sent" ? "bg-[#FA6000]/5 border-[#FA6000]/10" : "bg-emerald-500/5 border-emerald-500/10"
+                          file.type === "sent" ? "bg-primary/10 border-primary/10" : "bg-emerald-500/5 border-emerald-500/10"
                         )}>
-                          <FileIcon className={cn("size-4", file.type === "sent" ? "text-[#FA6000]" : "text-emerald-600")} />
+                          <FileIcon className={cn("size-4", file.type === "sent" ? "text-primary" : "text-emerald-600")} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-medium truncate text-foreground">{file.name}</p>
@@ -252,7 +237,7 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
                             <span className={cn(
                               "text-[9px] font-bold uppercase tracking-tight px-1 rounded-[2px] shrink-0 border",
                               file.type === "sent" 
-                                ? "bg-[#FA6000]/5 text-[#FA6000] border-[#FA6000]/10" 
+                                ? "bg-primary/10 text-primary border-primary/10" 
                                 : "bg-emerald-500/5 text-emerald-600 border-emerald-500/10"
                             )}>
                               {file.type}
@@ -373,8 +358,8 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
         <div className="shrink-0 p-3 bg-muted/20 border-b space-y-2">
           {selectedFiles && selectedFiles.length > 0 && !sendingFile && (
             <div className="flex items-center gap-3 bg-background border px-3 py-2.5 rounded-md shadow-sm">
-              <div className="size-9 rounded bg-[#FA6000]/10 flex items-center justify-center shrink-0 shadow-inner">
-                <FileIcon className="size-5 text-[#FA6000]" />
+              <div className="size-9 rounded bg-primary/10 flex items-center justify-center shrink-0 shadow-inner">
+                <FileIcon className="size-5 text-primary" />
               </div>
               <div className="flex-1 min-w-0 flex flex-col justify-center">
                 <div className="flex items-center gap-2 min-w-0">
@@ -387,7 +372,7 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
                 <Button
                   size="sm"
                   variant="default"
-                  className="h-8 px-3 text-xs bg-[#FA6000] hover:bg-[#E55800] text-white shadow-sm"
+                  className="h-8 px-3 text-xs bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
                   onClick={handleSendFile}
                   disabled={!peerConnected}
                 >
@@ -412,8 +397,8 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
           {sendingFile && (
             <div className="bg-background border rounded-md p-3 shadow-sm space-y-2">
               <div className="flex items-center gap-2">
-                <div className="size-6 rounded bg-[#FA6000]/10 flex items-center justify-center shrink-0">
-                  <Loader2 className="size-3.5 animate-spin text-[#FA6000]" />
+                <div className="size-6 rounded bg-primary/10 flex items-center justify-center shrink-0">
+                  <Loader2 className="size-3.5 animate-spin text-primary" />
                 </div>
                 <span className="text-xs font-semibold text-foreground flex-1 truncate">
                   Sending file...
@@ -464,9 +449,9 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
         </div>
       )}
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="flex flex-col min-h-full">
-          <div className="px-3 py-3 space-y-1 flex-1">
+      <ScrollArea className="min-h-0 flex-1 pb-32">
+        <div className="flex min-h-full flex-col">
+          <div className="flex-1 space-y-1 px-3 py-3">
             {peerMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[200px] text-center gap-3">
                 
@@ -490,8 +475,8 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
                       className={cn(
                         "max-w-[85%] min-w-0 px-4 py-2 text-[13px] leading-relaxed border shadow-sm wrap-break-word whitespace-pre-wrap rounded-sm",
                         isUser
-                          ? "bg-[#FA6000] text-white border-[#E55800]"
-                          : "bg-[#FA6000]/5 text-foreground border-[#FA6000]/10"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-primary/10 text-foreground border-primary/10"
                       )}
                     >
                       {msg.text}
@@ -505,51 +490,25 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
         </div>
       </ScrollArea>
 
-      <Separator />
-
-      <div className="shrink-0 p-3 bg-background border-t">
-        <div className="flex items-end gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleFileSelect}
-          />
-            <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-10 w-10 shrink-0 border-input hover:bg-muted"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!peerConnected}
-              >
-                <Paperclip className="size-4 text-muted-foreground" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="top">Attach File</TooltipContent>
-          </Tooltip>
-        <ButtonGroup className="flex-1">
-
-          <Input
-            ref={textareaRef as any}
-            placeholder="Type a message..."
-            value={chatPrompt}
-            onChange={(e) => setChatPrompt(e.target.value)}
-            onKeyDown={handleKeyDown as any}
-            className="flex-1 h-10 border px-3 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-[#FA6000]/30"
-          />
-
-          <Button
-            onClick={handlePromptSubmit}
-            disabled={!chatPrompt.trim()}
-            size="icon"
-            className="h-10 w-10 shrink-0 bg-[#FA6000] hover:bg-[#E55800] text-white shadow-sm"
-          >
-            <Send className="size-4" />
-          </Button>
-        </ButtonGroup>
-        </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-linear-to-t from-background via-background/80 to-transparent" />
+      <div className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-10">
+        <IdePromptComposer
+          value={chatPrompt}
+          onChange={setChatPrompt}
+          onSubmit={handlePromptSubmit}
+          placeholder="Message your peer..."
+          modeLabel="Peer"
+          showModelSelector={false}
+          onAttach={() => fileInputRef.current?.click()}
+          attachHiddenInput={
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="sr-only"
+              onChange={handleFileSelect}
+            />
+          }
+        />
       </div>
     </div>
   );

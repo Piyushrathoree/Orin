@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { FileSystemTree } from "@webcontainer/api";
 import { FileIconCustom } from "./file-icon";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -290,16 +291,22 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
     setDropTarget(null);
   }, []);
 
+  const rowPad = (depth: number) => ({ paddingLeft: `${8 + depth * 12}px` });
+
   // --- Render Inline Input ---
-  const renderInlineInput = (parentPath: string) => {
+  const renderInlineInput = (parentPath: string, depth = 0) => {
     if (!inlineInput || inlineInput.parentPath !== parentPath) return null;
 
     return (
-      <div className="flex items-center gap-1.5 px-2 py-1 ml-6">
+      <div
+        className="flex h-6 items-center gap-1.5 pr-2 text-[13px]"
+        style={rowPad(depth)}
+      >
+        <span className="w-3.5 shrink-0" />
         {inlineInput.type === "folder" ? (
-          <FolderClosed className="h-4 w-4  shrink-0" />
+          <FolderClosed className="size-3.5 shrink-0 text-muted-foreground" />
         ) : (
-          <File className="h-4 w-4 shrink-0" />
+          <File className="size-3.5 shrink-0 text-muted-foreground" />
         )}
         <input
           ref={inlineInputRef}
@@ -311,7 +318,7 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
             if (e.key === "Escape") setInlineInput(null);
           }}
           onBlur={confirmInlineCreate}
-          className="flex-1 bg-accent/50 border border-primary/50 rounded px-1.5 py-0.5 text-sm outline-none focus:border-primary min-w-0"
+          className="min-w-0 flex-1 rounded-sm border border-primary/50 bg-accent/50 px-1.5 py-0.5 text-[13px] outline-none focus:border-primary"
           placeholder={inlineInput.type === "file" ? "filename.ext" : "folder-name"}
         />
       </div>
@@ -321,7 +328,8 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
   // --- Recursive Tree Renderer ---
   const renderFileTree = (
     tree: FileSystemTree,
-    path = ""
+    path = "",
+    depth = 0,
   ): React.ReactNode[] => {
     // Sort: folders first, then files, alphabetically
     const entries = Object.entries(tree).sort(([aName, aNode], [bName, bNode]) => {
@@ -343,9 +351,11 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
         return (
           <div key={fullPath}>
             <div
-              className={`flex items-center gap-1.5 px-2 py-1.5 hover:bg-accent cursor-pointer text-sm rounded-sm group transition-colors ${
-                isDropTarget ? "bg-primary/15 ring-1 ring-primary/40" : ""
-              }`}
+              className={cn(
+                "group flex h-6 cursor-pointer items-center gap-1.5 pr-2 text-[13px] transition-colors hover:bg-accent",
+                isDropTarget && "bg-primary/15",
+              )}
+              style={rowPad(depth)}
               onClick={() => onToggleFolder(fullPath)}
               onContextMenu={(e) => handleContextMenu(e, fullPath, name, "folder")}
               draggable
@@ -356,14 +366,14 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
               onDragEnd={handleDragEnd}
             >
               {isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
               ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
               )}
               {isExpanded ? (
-                <FolderOpen className="h-4 w-4  shrink-0" />
+                <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
               ) : (
-                <FolderClosed className="h-4 w-4 shrink-0" />
+                <FolderClosed className="size-3.5 shrink-0 text-muted-foreground" />
               )}
 
               {isBeingRenamed ? (
@@ -379,64 +389,63 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
                   }}
                   onBlur={confirmRename}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex-1 bg-accent/50 border border-primary/50 rounded px-1.5 py-0.5 text-sm outline-none focus:border-primary min-w-0"
+                  className="min-w-0 flex-1 rounded-sm border border-primary/50 bg-accent/50 px-1.5 py-0.5 text-[13px] outline-none focus:border-primary"
                 />
               ) : (
-                <span className="font-medium truncate flex-1">{name}</span>
+                <span className="flex-1 truncate">{name}</span>
               )}
 
-              {/* Hover actions */}
               {!isBeingRenamed && (
-                <div className="hidden group-hover:flex items-center gap-0.5 ml-auto">
+                <div className="ml-auto hidden items-center gap-0.5 group-hover:flex">
                   <button
-                    className="p-0.5 hover:bg-muted rounded"
+                    className="rounded p-0.5 hover:bg-muted"
                     onClick={(e) => {
                       e.stopPropagation();
                       startInlineCreate(fullPath, "file");
                     }}
                     title="New File"
                   >
-                    <FilePlus className="h-3.5 w-3.5 text-muted-foreground" />
+                    <FilePlus className="size-3.5 text-muted-foreground" />
                   </button>
                   <button
-                    className="p-0.5 hover:bg-muted rounded"
+                    className="rounded p-0.5 hover:bg-muted"
                     onClick={(e) => {
                       e.stopPropagation();
                       startInlineCreate(fullPath, "folder");
                     }}
                     title="New Folder"
                   >
-                    <FolderPlus className="h-3.5 w-3.5 text-muted-foreground" />
+                    <FolderPlus className="size-3.5 text-muted-foreground" />
                   </button>
                   <button
-                    className="p-0.5 hover:bg-muted rounded"
+                    className="rounded p-0.5 hover:bg-muted"
                     onClick={(e) => {
                       e.stopPropagation();
                       startRename(fullPath, name);
                     }}
                     title="Rename"
                   >
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Pencil className="size-3.5 text-muted-foreground" />
                   </button>
                   <button
-                    className="p-0.5 hover:bg-muted rounded"
+                    className="rounded p-0.5 hover:bg-muted"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDelete(fullPath, name);
                     }}
                     title="Delete"
                   >
-                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                    <Trash2 className="size-3.5 text-red-400" />
                   </button>
                 </div>
               )}
             </div>
 
             {isExpanded && (
-              <div className="ml-3 border-l border-border/50 pl-2">
-                {renderInlineInput(fullPath)}
-                {renderFileTree(node.directory as FileSystemTree, fullPath)}
-              </div>
+              <>
+                {renderInlineInput(fullPath, depth + 1)}
+                {renderFileTree(node.directory as FileSystemTree, fullPath, depth + 1)}
+              </>
             )}
           </div>
         );
@@ -448,9 +457,11 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
       return (
         <div
           key={fullPath}
-          className={`flex items-center gap-1.5 px-2 py-1.5 pl-6 hover:bg-accent cursor-pointer text-sm rounded-sm group transition-colors ${
-            selectedFile === fullPath ? "bg-accent" : ""
-          }`}
+          className={cn(
+            "group flex h-6 cursor-pointer items-center gap-1.5 pr-2 text-[13px] transition-colors hover:bg-accent",
+            selectedFile === fullPath && "bg-accent text-foreground",
+          )}
+          style={rowPad(depth)}
           onClick={() => {
             if (!isBeingRenamed) onFileClick(fullPath, name);
           }}
@@ -459,7 +470,8 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
           onDragStart={(e) => handleDragStart(e, fullPath, name, "file")}
           onDragEnd={handleDragEnd}
         >
-          <FileIconCustom filename={name} className="h-4 w-4 shrink-0" />
+          <span className="w-3.5 shrink-0" />
+          <FileIconCustom filename={name} className="size-3.5" />
 
           {isBeingRenamed ? (
             <input
@@ -474,34 +486,33 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
               }}
               onBlur={confirmRename}
               onClick={(e) => e.stopPropagation()}
-              className="flex-1 bg-accent/50 border border-primary/50 rounded px-1.5 py-0.5 text-sm outline-none focus:border-primary min-w-0"
+              className="min-w-0 flex-1 rounded-sm border border-primary/50 bg-accent/50 px-1.5 py-0.5 text-[13px] outline-none focus:border-primary"
             />
           ) : (
-            <span className="truncate flex-1">{name}</span>
+            <span className="flex-1 truncate">{name}</span>
           )}
 
-          {/* Hover actions */}
           {!isBeingRenamed && (
-            <div className="hidden group-hover:flex items-center gap-0.5 ml-auto">
+            <div className="ml-auto hidden items-center gap-0.5 group-hover:flex">
               <button
-                className="p-0.5 hover:bg-muted rounded"
+                className="rounded p-0.5 hover:bg-muted"
                 onClick={(e) => {
                   e.stopPropagation();
                   startRename(fullPath, name);
                 }}
                 title="Rename"
               >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                <Pencil className="size-3.5 text-muted-foreground" />
               </button>
               <button
-                className="p-0.5 hover:bg-muted rounded"
+                className="rounded p-0.5 hover:bg-muted"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDelete(fullPath, name);
                 }}
                 title="Delete"
               >
-                <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                <Trash2 className="size-3.5 text-red-400" />
               </button>
             </div>
           )}
@@ -550,18 +561,16 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
     <>
       <ScrollArea className="flex-1">
         <div
-          className={`p-3 min-h-full ${
-            dropTarget === "__root__" ? "bg-primary/5" : ""
-          }`}
+          className={cn(
+            "min-h-full py-1",
+            dropTarget === "__root__" && "bg-primary/5",
+          )}
           onContextMenu={handleRootContextMenu}
           onDragOver={handleRootDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleRootDrop}
         >
-          <div className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wide">
-            Project Files
-          </div>
-          {renderInlineInput("")}
+          {renderInlineInput("", 0)}
           {fileStructure && renderFileTree(fileStructure)}
         </div>
       </ScrollArea>

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useRef, useState, type KeyboardEvent } from "react";
+import React, { useState } from "react";
 import { toast } from "sonner";
-import { FileCode2, Loader2, MessageSquare, Send, Trash2 } from "lucide-react";
+import { FileCode2, MessageSquare, Trash2 } from "lucide-react";
 import type { FileSystemTree } from "@webcontainer/api";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,10 +14,6 @@ import {
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Response } from "../ai-elements/response";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,10 +30,15 @@ import {
   parseOrinActions,
   type OrinAction,
 } from "@/lib/orin-artifact";
+import {
+  IdePromptComposer,
+  type ComposerContextFile,
+} from "./prompt-composer";
 
 interface AiChatProps {
   fileStructure: FileSystemTree;
   onActionsGenerated?: (actions: OrinAction[]) => Promise<void> | void;
+  currentFile?: ComposerContextFile | null;
 }
 
 type ChatMessage = {
@@ -56,9 +57,11 @@ type PendingActions = {
 function actionSummary(actions: OrinAction[]) {
   const createdOrUpdated = actions.filter((action) => action.type === "file").length;
   const deleted = actions.filter((action) => action.type === "delete").length;
+  const shellCommands = actions.filter((action) => action.type === "shell").length;
   const parts = [
     createdOrUpdated > 0 && `${createdOrUpdated} file${createdOrUpdated === 1 ? "" : "s"} updated`,
     deleted > 0 && `${deleted} file${deleted === 1 ? "" : "s"} deleted`,
+    shellCommands > 0 && `${shellCommands} command${shellCommands === 1 ? "" : "s"} run`,
   ].filter(Boolean);
 
   return parts.join(" · ");
@@ -67,6 +70,7 @@ function actionSummary(actions: OrinAction[]) {
 const AiChat: React.FC<AiChatProps> = ({
   fileStructure,
   onActionsGenerated,
+  currentFile = null,
 }) => {
   const [chatPrompt, setChatPrompt] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -74,7 +78,6 @@ const AiChat: React.FC<AiChatProps> = ({
   const [error, setError] = useState<Error | null>(null);
   const [pendingActions, setPendingActions] = useState<PendingActions | null>(null);
   const [isApplyingActions, setIsApplyingActions] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const loading = status === "loading";
 
   const pendingDeletions =
@@ -206,13 +209,6 @@ const AiChat: React.FC<AiChatProps> = ({
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void handlePromptSubmit();
-    }
-  };
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <AlertDialog
@@ -253,88 +249,69 @@ const AiChat: React.FC<AiChatProps> = ({
         </AlertDialogContent>
       </AlertDialog>
 
-      <div className="flex shrink-0 items-center gap-1 border-b bg-muted/40 px-3 py-2.5">
-        <Badge
-          variant="outline"
-          className="gap-1.5 rounded-none border-primary/30 bg-primary/10 py-0.5 text-primary"
-        >
-          {loading ? <Loader2 className="size-3 animate-spin" /> : <div className="size-1.5 bg-primary" />}
-          AI Assistant
-        </Badge>
-        <Badge variant="secondary" className="rounded-none py-0.5 text-xs">
-          {loading ? "Thinking..." : status === "error" ? "Error" : "Ready"}
-        </Badge>
-      </div>
+      <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+        <Conversation className="absolute inset-0 mask-b-from-80% pb-32">
+          <ConversationContent className="gap-3 p-3">
+            {messages.length === 0 ? (
+              <ConversationEmptyState
+                icon={<MessageSquare className="size-8" />}
+                title="No messages yet"
+                description="Start chatting with Orin."
+              />
+            ) : (
+              <>
+                {messages.map((message) => (
+                  <Message from={message.role} key={message.id}>
+                    <MessageContent>
+                      <Response>{message.content}</Response>
+                      {message.actions && message.actions.length > 0 && (
+                        <div className="flex items-center gap-1.5 border-t pt-2 text-xs text-muted-foreground">
+                          {message.actions.some((action) => action.type === "delete") ? (
+                            <Trash2 className="size-3" />
+                          ) : (
+                            <FileCode2 className="size-3" />
+                          )}
+                          {message.actionStatus === "pending"
+                            ? "Changes awaiting approval"
+                            : message.actionStatus === "cancelled"
+                              ? "Changes not applied"
+                              : actionSummary(message.actions)}
+                        </div>
+                      )}
+                    </MessageContent>
+                  </Message>
+                ))}
 
-      <Conversation className="w-full pb-26 mask-b-from-80%">
-        <ConversationContent className="gap-3 p-3">
-          {messages.length === 0 ? (
-            <ConversationEmptyState
-              icon={<MessageSquare className="size-12" />}
-              title="No messages yet"
-              description="Start chatting with Orin."
-            />
-          ) : (
-            <>
-              {messages.map((message) => (
-                <Message from={message.role} key={message.id}>
-                  <MessageContent>
-                    <Response>{message.content}</Response>
-                    {message.actions && message.actions.length > 0 && (
-                      <div className="flex items-center gap-1.5 border-t pt-2 text-xs text-muted-foreground">
-                        {message.actions.some((action) => action.type === "delete") ? (
-                          <Trash2 className="size-3" />
-                        ) : (
-                          <FileCode2 className="size-3" />
-                        )}
-                        {message.actionStatus === "pending"
-                          ? "Changes awaiting approval"
-                          : message.actionStatus === "cancelled"
-                            ? "Changes not applied"
-                            : actionSummary(message.actions)}
-                      </div>
-                    )}
-                  </MessageContent>
-                </Message>
-              ))}
+                {loading && (
+                  <div className="flex justify-start p-2">
+                    <Skeleton className="h-10 w-40" />
+                  </div>
+                )}
+              </>
+            )}
 
-              {loading && (
-                <div className="flex justify-start p-2">
-                  <Skeleton className="h-10 w-40" />
-                </div>
-              )}
-            </>
-          )}
+            {error && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+                {error.message}
+              </div>
+            )}
+          </ConversationContent>
 
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
-              {error.message}
-            </div>
-          )}
-        </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
 
-        <ConversationScrollButton />
-      </Conversation>
-
-      <div className="shrink-0 border-t bg-background p-3">
-        <ButtonGroup className="flex w-full flex-1">
-          <Input
-            ref={inputRef}
-            placeholder="Type your message..."
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-linear-to-t from-background via-background/80 to-transparent" />
+        <div className="pointer-events-auto absolute inset-x-2.5 bottom-2.5 z-10">
+          <IdePromptComposer
             value={chatPrompt}
-            onChange={(event) => setChatPrompt(event.target.value)}
-            onKeyDown={handleKeyDown}
-            className="h-10 w-full flex-1 border px-3 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary/30"
+            onChange={setChatPrompt}
+            onSubmit={() => void handlePromptSubmit()}
+            disabled={loading || pendingActions !== null}
+            loading={loading}
+            currentFile={currentFile}
+            placeholder="Plan, search, build anything"
           />
-          <Button
-            onClick={() => void handlePromptSubmit()}
-            disabled={!chatPrompt.trim() || loading || pendingActions !== null}
-            size="icon"
-            className="h-10 w-10 shrink-0 bg-primary text-primary-foreground shadow-sm hover:bg-primary-dark"
-          >
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-          </Button>
-        </ButtonGroup>
+        </div>
       </div>
     </div>
   );

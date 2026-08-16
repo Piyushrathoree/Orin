@@ -45,6 +45,9 @@
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
+  --color-editor: hsl(var(--editor));
+  --color-editor-gutter: hsl(var(--editor-gutter));
+  --color-editor-line: hsl(var(--editor-line));
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -53,7 +56,51 @@
 }
 
 @layer base {
-  :root,
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 210 11% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 11% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 11% 12%;
+    --primary: 165 72% 36%;
+    --primary-foreground: 0 0% 100%;
+    --primary-dark: 165 80% 30%;
+    --primary-light: 165 45% 92%;
+    --secondary: 210 16% 94%;
+    --secondary-foreground: 210 11% 12%;
+    --muted: 210 16% 94%;
+    --muted-foreground: 210 8% 42%;
+    --muted-foreground-light: 210 8% 55%;
+    --muted-foreground-dark: 210 8% 35%;
+    --accent: 210 16% 90%;
+    --accent-foreground: 210 11% 12%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 210 14% 88%;
+    --border-light: 210 14% 92%;
+    --border-dark: 210 14% 80%;
+    --input: 210 14% 88%;
+    --ring: 165 72% 36%;
+    --chart-1: 165 72% 36%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 173 58% 39%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --sidebar: 210 18% 96%;
+    --sidebar-foreground: 210 11% 12%;
+    --sidebar-primary: 165 72% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 16% 92%;
+    --sidebar-accent-foreground: 210 11% 12%;
+    --sidebar-border: 210 14% 88%;
+    --sidebar-ring: 165 72% 36%;
+    --editor: 0 0% 100%;
+    --editor-gutter: 210 18% 97%;
+    --editor-line: 210 20% 95%;
+    --radius: 0.75rem;
+  }
+
   .dark {
     --background: 210 11% 7%;
     --foreground: 160 14% 93%;
@@ -93,7 +140,9 @@
     --sidebar-accent-foreground: 160 14% 93%;
     --sidebar-border: 240 100% 100% / 0.1;
     --sidebar-ring: 165 96% 71%;
-    --radius: 0.75rem;
+    --editor: 217 14% 16%;
+    --editor-gutter: 217 14% 13%;
+    --editor-line: 217 12% 20%;
   }
 
   * {
