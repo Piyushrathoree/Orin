@@ -1,3 +1,4 @@
+import { DEFAULT_JWT_SECRET, verifyToken, AUTH_COOKIE_NAME } from "@orin/auth";
 import { WebSocketServer } from "ws";
 import type { RawData, WebSocket } from "ws";
 import {
@@ -7,7 +8,7 @@ import {
   parseClientMessage,
   type ClientMessage,
   type CodeFile,
-} from "./protocol";
+} from "./protocol.js";
 
 type RoomState = {
   clients: Set<WebSocket>;
@@ -29,6 +30,15 @@ const wss = new WebSocketServer({
 
 const rooms = new Map<string, RoomState>();
 const socketRooms = new Map<WebSocket, string>();
+
+function cookieValue(header: string | undefined, name: string) {
+  for (const item of header?.split(";") ?? []) {
+    const separator = item.indexOf("=");
+    if (separator < 0 || item.slice(0, separator).trim() !== name) continue;
+    return decodeURIComponent(item.slice(separator + 1).trim());
+  }
+  return null;
+}
 
 function send(ws: WebSocket, payload: Record<string, unknown>) {
   if (ws.readyState === 1) ws.send(JSON.stringify(payload));
@@ -244,30 +254,45 @@ function joinRoom(ws: WebSocket, roomId: string) {
   }
 }
 
-wss.on("connection", (ws: WebSocket) => {
-  ws.on("message", (data: RawData) => {
-    const message = parseClientMessage(data.toString());
-    if (!message) return;
-
-    if (message.type === "join") {
-      joinRoom(ws, message.roomId);
+wss.on("connection", (ws: WebSocket, request) => {
+  void (async () => {
+    const token = cookieValue(request.headers.cookie, AUTH_COOKIE_NAME);
+    if (!token) {
+      ws.close(1008, "Authentication required");
       return;
     }
 
-    if (
-      message.type === "code-init" ||
-      message.type === "code-snapshot" ||
-      message.type === "code-update"
-    ) {
-      handleCodeMessage(ws, message);
+    try {
+      await verifyToken(token, process.env.JWT_SECRET || DEFAULT_JWT_SECRET);
+    } catch {
+      ws.close(1008, "Invalid session");
       return;
     }
 
-    relayPeerMessage(ws, message);
-  });
+    ws.on("message", (data: RawData) => {
+      const message = parseClientMessage(data.toString());
+      if (!message) return;
 
-  ws.on("close", () => leaveRoom(ws));
-  ws.on("error", () => leaveRoom(ws));
+      if (message.type === "join") {
+        joinRoom(ws, message.roomId);
+        return;
+      }
+
+      if (
+        message.type === "code-init" ||
+        message.type === "code-snapshot" ||
+        message.type === "code-update"
+      ) {
+        handleCodeMessage(ws, message);
+        return;
+      }
+
+      relayPeerMessage(ws, message);
+    });
+
+    ws.on("close", () => leaveRoom(ws));
+    ws.on("error", () => leaveRoom(ws));
+  })();
 });
 
 console.log(`[Orin WS] Listening on ws://localhost:${port}`);

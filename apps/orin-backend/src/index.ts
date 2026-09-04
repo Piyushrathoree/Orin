@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import templateRoutes from './routes/template';
 import chatRoutes from './routes/chat';
+import authRoutes from './routes/auth';
 import { config } from './config/environment';
 import { requireAuth } from './middleware/require-auth';
 
@@ -28,6 +29,7 @@ app.get('/health', (_req, res) => {
   });
 });
 
+app.use('/auth', authRoutes);
 app.use('/template', requireAuth, templateRoutes);
 app.use('/chat', requireAuth, chatRoutes);
 

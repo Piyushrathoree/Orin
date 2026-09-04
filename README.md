@@ -5,7 +5,7 @@ Orin uses the existing `apps/ui` Next.js frontend and the standalone `apps/orin-
 ## Run locally
 
 1. Copy `apps/orin-backend/.env.example` to `apps/orin-backend/.env` and choose `AI_PROVIDER=local` for Ollama/LM Studio/llama.cpp or `AI_PROVIDER=gemini` with a Gemini API key.
-2. Set `ORIN_BACKEND_URL=http://localhost:3030` if needed. Custom JWT auth will be added later.
+2. Set `ORIN_BACKEND_URL=http://localhost:3030` if needed.
 3. Start all local services with one command:
 
 ```bash

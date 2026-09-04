@@ -1,5 +1,8 @@
+import { config as loadEnv } from 'dotenv';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import { PrismaClient } from '../generated/prisma/client';
+
+loadEnv({ path: new URL('../.env', import.meta.url) });
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {

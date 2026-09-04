@@ -42,7 +42,7 @@ import {
   saveProjectPrompt,
   takePendingPrompt,
 } from "@/lib/initial-prompt";
-import { ArrowUpRight, FolderDown, FolderOpen, Trash2 } from "lucide-react";
+import { ArrowUpRight, FolderDown, FolderOpen, LogOut, Trash2 } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -230,6 +230,11 @@ const Page = () => {
     setDeletingProjectId(null);
   };
 
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.assign("/sign-in");
+  };
+
   const visibleProjects = projects.slice(0, 5);
 
   return (
@@ -244,6 +249,10 @@ const Page = () => {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Button variant="outline" size="sm" onClick={handleLogout}>
+              <LogOut className="size-3.5" />
+              Sign out
+            </Button>
             <Link
               href="/"
               className="hidden rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary sm:inline-flex"

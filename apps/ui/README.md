@@ -1,4 +1,4 @@
-Orin is the active Next.js frontend. The marketing landing page, dashboard, collaborative editor, and WebContainers all run from this package. Custom JWT auth will be added later. AI requests are proxied to `apps/orin-backend`.
+Orin is the active Next.js frontend. The marketing landing page, dashboard, collaborative editor, and WebContainers all run from this package. Authentication uses the shared `@orin/auth` package through the backend proxy. AI requests are proxied to `apps/orin-backend`.
 
 ## Getting Started
 
