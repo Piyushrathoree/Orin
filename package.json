@@ -8,10 +8,15 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "bun run --cwd apps/ui check-types",
     "build:orin": "bun run --cwd apps/orin-backend build && bun run --cwd apps/ui build",
+    "build:all": "bun run build:orin && bun run --cwd apps/ws build",
     "dev:orin": "bun run --cwd apps/ui dev",
     "dev:orin-backend": "bun run --cwd apps/orin-backend dev",
+    "dev:all": "turbo run dev --parallel",
     "lint:orin": "bun run --cwd apps/ui lint",
-    "check-types:orin": "bun run --cwd apps/ui check-types && bun run --cwd apps/orin-backend typecheck"
+    "lint:all": "bun run lint:orin && bun run --cwd apps/ws lint",
+    "check-types:orin": "bun run --cwd apps/ui check-types && bun run --cwd apps/orin-backend typecheck",
+    "check-types:all": "bun run check-types:orin && bun run --cwd apps/ws typecheck",
+    "test": "bun test --pass-with-no-tests"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
@@ -29,9 +34,5 @@
   "overrides": {
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4"
-  },
-  "dependencies": {
-    "@tanstack/react-query": "^5.90.19",
-    "@tanstack/react-query-devtools": "^5.91.2"
   }
 }
