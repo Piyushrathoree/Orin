@@ -9,10 +9,13 @@ import { X, Maximize2, Trash2, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "motion/react";
 import { useTheme } from "next-themes";
+import type { WebContainerProcess } from "@webcontainer/api";
+import { getProjectRoot } from "@/lib/package-manager";
 
 interface TerminalComponentProps {
   onClose?: () => void;
   onMaximize?: () => void;
+  onReady?: (write: (data: string) => void) => void;
 }
 
 function getTerminalTheme(isDark: boolean) {
@@ -68,6 +71,7 @@ function getTerminalTheme(isDark: boolean) {
 const TerminalComponent: React.FC<TerminalComponentProps> = ({
   onClose,
   onMaximize,
+  onReady,
 }) => {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme !== "light";
@@ -79,8 +83,8 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const shellProcessRef = useRef<any>(null);
-  const inputWriterRef = useRef<any>(null);
+  const shellProcessRef = useRef<WebContainerProcess | null>(null);
+  const inputWriterRef = useRef<WritableStreamDefaultWriter<string> | null>(null);
   const projectDirectoryRef = useRef("/");
 
   // Suggestions state
@@ -91,21 +95,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({
 
   const getProjectDirectory = async () => {
     if (!webContainerRef.current) return "/";
-
-    try {
-      await webContainerRef.current.fs.readFile("/package.json", "utf-8");
-      return "/";
-    } catch {
-      try {
-        await webContainerRef.current.fs.readFile(
-          "/vanilla-web-app/package.json",
-          "utf-8",
-        );
-        return "/vanilla-web-app";
-      } catch {
-        return "/";
-      }
-    }
+    return (await getProjectRoot(webContainerRef.current.fs)) ?? "/";
   };
 
   const startShell = async (terminal: Terminal) => {
@@ -177,8 +167,8 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({
             { withFileTypes: true },
           );
           const dirs = entries
-            .filter((e: any) => e.isDirectory())
-            .map((e: any) => e.name)
+            .filter((e) => e.isDirectory())
+            .map((e) => e.name)
             .filter((name: string) => name.startsWith(lastPart));
           
           if (dirs.length > 0) {
@@ -255,6 +245,9 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({
     term.open(terminalRef.current);
     termRef.current = term;
     fitAddonRef.current = fitAddon;
+    onReady?.((data) => {
+      term.write(data);
+    });
 
     const initTimer = setTimeout(fitTerminal, 150);
 
@@ -276,7 +269,7 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({
       term.dispose();
       termRef.current = null;
     };
-  }, [isContainerBooted, isDark]);
+  }, [isContainerBooted, isDark, onReady]);
 
   useEffect(() => {
     if (termRef.current) {

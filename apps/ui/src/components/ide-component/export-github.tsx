@@ -17,6 +17,11 @@ import { Github, Loader2, CheckCircle2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { FileSystemTree } from "@webcontainer/api";
 
+interface GitHubErrorResponse {
+  message?: string;
+  errors?: Array<{ message?: string }>;
+}
+
 interface ExportGithubDialogProps {
   fileStructure: FileSystemTree;
   projectName?: string;
@@ -68,7 +73,7 @@ const ExportGithubDialog = ({
         headers: { Authorization: authHeader },
       });
       if (!userRes.ok) {
-        const errData = await userRes.json().catch(() => ({}));
+        const errData = (await userRes.json().catch(() => ({}))) as GitHubErrorResponse;
         throw new Error(errData.message || "Invalid GitHub token or insufficient permissions");
       }
       const user = await userRes.json();
@@ -89,8 +94,8 @@ const ExportGithubDialog = ({
       });
 
       if (!createRes.ok) {
-        const errData = await createRes.json().catch(() => ({}));
-        if (createRes.status === 422 && errData.errors?.some((e: any) => e.message?.includes("already exists"))) {
+        const errData = (await createRes.json().catch(() => ({}))) as GitHubErrorResponse;
+        if (createRes.status === 422 && errData.errors?.some((e) => e.message?.includes("already exists"))) {
           console.log("Repository already exists, proceeding to update files.");
         } else {
           throw new Error(errData.message || `Failed to create repository (${createRes.status})`);
@@ -139,9 +144,9 @@ const ExportGithubDialog = ({
 
       setExportedUrl(`https://github.com/${username}/${repoName}`);
       toast.success("Project exported successfully!", { id: toastId });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Export error:", error);
-      toast.error(error.message || "Export failed");
+      toast.error(error instanceof Error ? error.message : "Export failed");
     } finally {
       setLoading(false);
     }

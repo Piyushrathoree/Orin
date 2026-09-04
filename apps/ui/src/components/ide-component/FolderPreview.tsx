@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { FileSystemTree } from "@webcontainer/api";
+import { getRootDirectoryName } from "@/data/project-file";
 import { FileIconCustom } from "./file-icon";
 import { cn } from "@/lib/utils";
 import {
@@ -77,22 +78,25 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
   onDeleteNode,
   onRenameNode,
 }, ref) => {
-  useImperativeHandle(ref, () => ({
-    startNewFile: () => {
-      if (!expandedFolders.has("vanilla-web-app")) {
-        onToggleFolder("vanilla-web-app");
-      }
-      setInlineInput({ parentPath: "vanilla-web-app", type: "file" });
-      setNewItemName("");
-    },
-    startNewFolder: () => {
-      if (!expandedFolders.has("vanilla-web-app")) {
-        onToggleFolder("vanilla-web-app");
-      }
-      setInlineInput({ parentPath: "vanilla-web-app", type: "folder" });
-      setNewItemName("");
-    },
-  }));
+  useImperativeHandle(ref, () => {
+    const rootFolder = getRootDirectoryName(fileStructure);
+    return {
+      startNewFile: () => {
+        if (!expandedFolders.has(rootFolder)) {
+          onToggleFolder(rootFolder);
+        }
+        setInlineInput({ parentPath: rootFolder, type: "file" });
+        setNewItemName("");
+      },
+      startNewFolder: () => {
+        if (!expandedFolders.has(rootFolder)) {
+          onToggleFolder(rootFolder);
+        }
+        setInlineInput({ parentPath: rootFolder, type: "folder" });
+        setNewItemName("");
+      },
+    };
+  });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [inlineInput, setInlineInput] = useState<InlineInputState | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
@@ -638,7 +642,7 @@ const FolderPreview = forwardRef<FolderPreviewRef, FolderPreviewProps>(({
       <AlertDialog open={!!deleteTarget} onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogTitle>Delete &quot;{deleteTarget?.name}&quot;?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete{" "}
               <span className="font-medium text-foreground">{deleteTarget?.name}</span>.

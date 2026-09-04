@@ -3,7 +3,6 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { SignedIn, UserButton } from "@clerk/nextjs";
 import { File, Search, Terminal, BotMessageSquare } from "lucide-react";
 import {
   Tooltip,
@@ -126,19 +125,6 @@ const ActivityBar = ({
         </ActivityButton>
         <div className="flex h-10 items-center justify-center">
           <ThemeToggle />
-        </div>
-        <div className="flex h-10 items-center justify-center">
-          <SignedIn>
-            <UserButton
-              afterSignOutUrl="/"
-              appearance={{
-                elements: {
-                  userButtonAvatarBox: "size-7",
-                  userButtonTrigger: "size-7",
-                },
-              }}
-            />
-          </SignedIn>
         </div>
       </div>
     </div>

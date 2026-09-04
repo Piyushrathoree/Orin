@@ -11,14 +11,7 @@ import ExportGithubDialog from "./export-github";
 import { FileIconCustom } from "./file-icon";
 import { FileSystemTree } from "@webcontainer/api";
 import { cn } from "@/lib/utils";
-
-interface TabInfo {
-  id: string;
-  name: string;
-  path: string;
-  isDirty: boolean;
-  content: string;
-}
+import type { TabInfo } from "@/hooks/topbar";
 
 interface NavBarProps {
   openTabs: TabInfo[];
