@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getOrinBackendUrl } from "@/lib/orin-api";
+import { getOrinBackendUrl, orinBackendHeaders } from "@/lib/orin-api";
+
+export const maxDuration = 180;
+
+const PROXY_TIMEOUT_MS = 180_000;
 
 export async function POST(request: Request) {
   try {
@@ -11,31 +15,45 @@ export async function POST(request: Request) {
     }
 
     const backendUrl = getOrinBackendUrl();
+    const headers = orinBackendHeaders(request);
     const templateResponse = await fetch(`${backendUrl}/template`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify({ prompt }),
       cache: "no-store",
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     });
 
-    const template = await templateResponse.json();
+    const template = await templateResponse.json().catch(() => ({
+      error: "Orin backend returned an invalid template response",
+    }));
     if (!templateResponse.ok) {
       return NextResponse.json(template, { status: templateResponse.status });
     }
 
+    const templatePrompts = Array.isArray(template.prompts)
+      ? template.prompts.filter(
+          (item: unknown): item is string =>
+            typeof item === "string" && item.trim().length > 0,
+        )
+      : [];
+
     const chatResponse = await fetch(`${backendUrl}/chat`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers,
       body: JSON.stringify({
-        messages: [
-          ...(Array.isArray(template.prompts) ? template.prompts : []),
-          prompt,
-        ].map((content) => ({ role: "user", content })),
+        messages: [...templatePrompts, prompt].map((content) => ({
+          role: "user",
+          content,
+        })),
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     });
 
-    const chat = await chatResponse.json();
+    const chat = await chatResponse.json().catch(() => ({
+      error: "Orin backend returned an invalid chat response",
+    }));
     return NextResponse.json(
       { ...chat, template },
       { status: chatResponse.status },
@@ -48,4 +66,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

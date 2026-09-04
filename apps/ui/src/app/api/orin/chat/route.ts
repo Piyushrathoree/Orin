@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getOrinBackendUrl } from "@/lib/orin-api";
+import { getOrinBackendUrl, orinBackendHeaders } from "@/lib/orin-api";
+
+export const maxDuration = 180;
+
+const PROXY_TIMEOUT_MS = 180_000;
 
 type IncomingMessage = {
   role?: unknown;
@@ -62,12 +66,15 @@ export async function POST(request: Request) {
 
     const response = await fetch(`${getOrinBackendUrl()}/chat`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: orinBackendHeaders(request),
       body: JSON.stringify({ messages: contextualMessages }),
       cache: "no-store",
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
     });
 
-    const payload = await response.json();
+    const payload = await response.json().catch(() => ({
+      error: "Orin backend returned an invalid response",
+    }));
     return NextResponse.json(payload, { status: response.status });
   } catch (error) {
     console.error("[Orin UI] Chat proxy failed:", error);

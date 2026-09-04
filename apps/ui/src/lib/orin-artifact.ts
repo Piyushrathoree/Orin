@@ -1,16 +1,27 @@
 import type { FileSystemTree } from "@webcontainer/api";
+import {
+  getProjectRootFromTree,
+  isDevServerCommand,
+  splitShellCommandChain,
+} from "@/lib/package-manager";
 
-export interface OrinFile {
+export interface SharedCodeFile {
   path: string;
   content: string;
 }
 
+export interface SharedCodeSnapshot {
+  files: SharedCodeFile[];
+  directories: string[];
+}
+
 export type OrinAction =
   | { type: "file"; path: string; content: string }
+  | { type: "directory"; path: string }
   | { type: "delete"; path: string }
   | { type: "shell"; command: string };
 
-function normalizeFilePath(path: string): string | null {
+export function normalizeOrinPath(path: string): string | null {
   const normalizedPath = path.trim();
   if (
     !normalizedPath ||
@@ -49,7 +60,7 @@ export function parseOrinActions(response: string): OrinAction[] {
     const rawPath = attributes.match(
       /\b(?:filePath|path)\s*=\s*["']([^"']+)["']/i,
     )?.[1];
-    const path = rawPath ? normalizeFilePath(rawPath) : null;
+    const path = rawPath ? normalizeOrinPath(rawPath) : null;
 
     if (!path) continue;
 
@@ -76,18 +87,7 @@ export function getOrinResponseText(response: string): string {
     .trim();
 }
 
-/** Extracts the file actions emitted by the Orin backend. */
-export function parseOrinArtifact(response: string): OrinFile[] {
-  const files = new Map<string, OrinFile>();
-  for (const action of parseOrinActions(response)) {
-    if (action.type !== "file") continue;
-    files.set(action.path, action);
-  }
-
-  return [...files.values()];
-}
-
-export function filesToTree(files: OrinFile[]): FileSystemTree {
+function filesToTree(files: SharedCodeFile[]): FileSystemTree {
   const tree: FileSystemTree = {};
 
   for (const file of files) {
@@ -117,7 +117,30 @@ export function filesToTree(files: OrinFile[]): FileSystemTree {
   return tree;
 }
 
-export function mergeFileTrees(
+function directoriesToTree(paths: string[]): FileSystemTree {
+  const tree: FileSystemTree = {};
+
+  for (const path of paths) {
+    const parts = path.split("/").filter(Boolean);
+    let directory = tree;
+
+    for (const part of parts) {
+      const existing = directory[part];
+      if (existing && "directory" in existing) {
+        directory = existing.directory;
+        continue;
+      }
+
+      const nestedDirectory: FileSystemTree = {};
+      directory[part] = { directory: nestedDirectory };
+      directory = nestedDirectory;
+    }
+  }
+
+  return tree;
+}
+
+function mergeFileTrees(
   base: FileSystemTree,
   updates: FileSystemTree,
 ): FileSystemTree {
@@ -148,7 +171,6 @@ function removeFileFromTree(
   if (!node) return tree;
 
   if (remainingParts.length === 0) {
-    if (!("file" in node)) return tree;
     const updatedTree = { ...tree };
     delete updatedTree[name];
     return updatedTree;
@@ -160,13 +182,40 @@ function removeFileFromTree(
   if (updatedDirectory === node.directory) return tree;
 
   const updatedTree = { ...tree };
-  if (Object.keys(updatedDirectory).length === 0) {
-    delete updatedTree[name];
-  } else {
-    updatedTree[name] = { directory: updatedDirectory };
-  }
+  updatedTree[name] = { directory: updatedDirectory };
 
   return updatedTree;
+}
+
+function projectFolderPrefix(tree: FileSystemTree): string {
+  const root = getProjectRootFromTree(tree);
+  if (!root || root === "/") return "";
+  return root.replace(/^\/+/, "");
+}
+
+/**
+ * AI actions are relative to the Vite project root. Orin trees nest that
+ * project under a folder such as `my-app/`, so prefix paths when needed.
+ */
+export function localizeOrinActions(
+  actions: OrinAction[],
+  tree: FileSystemTree,
+): OrinAction[] {
+  const prefix = projectFolderPrefix(tree);
+  if (!prefix) return actions;
+
+  return actions.map((action) => {
+    if (action.type === "shell") return action;
+    if (action.path === prefix || action.path.startsWith(`${prefix}/`)) {
+      return action;
+    }
+    return { ...action, path: `${prefix}/${action.path}` };
+  });
+}
+
+export function isAutoStartedDevCommand(command: string): boolean {
+  const segments = splitShellCommandChain(command);
+  return segments.length > 0 && segments.every(isDevServerCommand);
 }
 
 /** Applies ordered file writes and file deletions to a project tree. */
@@ -179,6 +228,10 @@ export function applyOrinActions(
       return mergeFileTrees(updatedTree, filesToTree([action]));
     }
 
+    if (action.type === "directory") {
+      return mergeFileTrees(updatedTree, directoriesToTree([action.path]));
+    }
+
     if (action.type === "delete") {
       return removeFileFromTree(updatedTree, action.path.split("/"));
     }
@@ -187,8 +240,44 @@ export function applyOrinActions(
   }, tree);
 }
 
+/** Returns the bounded text-file and directory snapshot shared through WS. */
+export function fileTreeToCodeSnapshot(
+  tree: FileSystemTree,
+): SharedCodeSnapshot {
+  const files: SharedCodeFile[] = [];
+  const directories: string[] = [];
+
+  const visit = (current: FileSystemTree, parentPath = "") => {
+    for (const [name, node] of Object.entries(current)) {
+      const path = parentPath ? `${parentPath}/${name}` : name;
+
+      if ("directory" in node) {
+        directories.push(path);
+        visit(node.directory, path);
+        continue;
+      }
+
+      if (typeof node.file === "string") {
+        files.push({ path, content: node.file });
+      } else if (
+        "contents" in node.file &&
+        typeof node.file.contents === "string"
+      ) {
+        files.push({ path, content: node.file.contents });
+      }
+    }
+  };
+
+  visit(tree);
+  return { files, directories };
+}
+
+export function fileTreeToCodeFiles(tree: FileSystemTree): SharedCodeFile[] {
+  return fileTreeToCodeSnapshot(tree).files;
+}
+
 export function fileTreeToPrompt(tree: FileSystemTree): string {
-  const files: OrinFile[] = [];
+  const files: SharedCodeFile[] = [];
 
   const visit = (current: FileSystemTree, parentPath = "") => {
     for (const [name, node] of Object.entries(current)) {

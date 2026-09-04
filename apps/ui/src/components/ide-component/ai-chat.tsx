@@ -39,6 +39,7 @@ interface AiChatProps {
   fileStructure: FileSystemTree;
   onActionsGenerated?: (actions: OrinAction[]) => Promise<void> | void;
   currentFile?: ComposerContextFile | null;
+  runtimeReady?: boolean;
 }
 
 type ChatMessage = {
@@ -71,6 +72,7 @@ const AiChat: React.FC<AiChatProps> = ({
   fileStructure,
   onActionsGenerated,
   currentFile = null,
+  runtimeReady = true,
 }) => {
   const [chatPrompt, setChatPrompt] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -134,8 +136,12 @@ const AiChat: React.FC<AiChatProps> = ({
       toast.error("Prompt cannot be empty");
       return;
     }
-    if (loading || pendingActions) {
-      toast.info("Finish the pending AI changes before sending another message.");
+    if (loading || pendingActions || !runtimeReady) {
+      toast.info(
+        runtimeReady
+          ? "Finish the pending AI changes before sending another message."
+          : "Wait for the preview runtime to finish starting.",
+      );
       return;
     }
 
@@ -306,10 +312,14 @@ const AiChat: React.FC<AiChatProps> = ({
             value={chatPrompt}
             onChange={setChatPrompt}
             onSubmit={() => void handlePromptSubmit()}
-            disabled={loading || pendingActions !== null}
+            disabled={loading || pendingActions !== null || !runtimeReady}
             loading={loading}
             currentFile={currentFile}
-            placeholder="Plan, search, build anything"
+            placeholder={
+              runtimeReady
+                ? "Plan, search, build anything"
+                : "Waiting for the preview runtime..."
+            }
           />
         </div>
       </div>
