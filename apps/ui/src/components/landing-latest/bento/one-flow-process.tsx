@@ -140,8 +140,8 @@ export default function OneFlowProcess() {
                 key={`${step}-${index}`}
                 step={step}
                 index={index}
-                active={reduce && index === 1}
-                dim={reduce && index !== 1}
+                active={Boolean(reduce && index === 1)}
+                dim={Boolean(reduce && index !== 1)}
               />
             ))}
           </div>

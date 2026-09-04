@@ -5,7 +5,6 @@ import Image from "next/image"
 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { SignedIn, SignedOut } from "@clerk/nextjs"
 import { Menu } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -19,18 +18,9 @@ function AuthCta({ className }: { className?: string }) {
     .join(" ")
 
   return (
-    <>
-      <SignedOut>
-        <Button asChild className={buttonClass}>
-          <Link href="/sign-up">Try for Free</Link>
-        </Button>
-      </SignedOut>
-      <SignedIn>
-        <Button asChild className={buttonClass}>
-          <Link href="/main">Open workspace</Link>
-        </Button>
-      </SignedIn>
-    </>
+    <Button asChild className={buttonClass}>
+      <Link href="/main">Open workspace</Link>
+    </Button>
   )
 }
 

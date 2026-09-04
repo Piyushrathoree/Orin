@@ -1,8 +1,6 @@
 "use client";
 
-import { SignedIn, SignedOut, useAuth } from "@clerk/nextjs";
 import { ArrowUp, ChevronDown, ChevronRight, Paperclip } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -15,13 +13,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { savePendingPrompt } from "@/lib/initial-prompt";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_MODEL = "Fable 5";
 
 export function PromptLauncher() {
   const router = useRouter();
-  const { isSignedIn } = useAuth();
   const [prompt, setPrompt] = useState("");
   const [fastMode, setFastMode] = useState(true);
   const [model] = useState(DEFAULT_MODEL);
@@ -29,18 +27,12 @@ export function PromptLauncher() {
 
   const triggerLabel = fastMode ? `${model} Fast` : model;
 
-  const openWorkspace = useCallback(() => {
-    const value = prompt.trim();
-    router.push(value ? `/room?prompt=${encodeURIComponent(value)}` : "/room");
-  }, [prompt, router]);
-
   const handleSubmit = useCallback(() => {
-    if (isSignedIn) {
-      openWorkspace();
-    } else {
-      router.push("/sign-up");
-    }
-  }, [isSignedIn, openWorkspace, router]);
+    const trimmed = prompt.trim();
+    if (trimmed) savePendingPrompt(trimmed);
+
+    router.push("/main");
+  }, [prompt, router]);
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -158,32 +150,16 @@ export function PromptLauncher() {
             <span className="sr-only">Attach file</span>
           </Button>
 
-          <SignedOut>
-            <Button
-              asChild
-              size="icon-sm"
-              className="size-8 rounded-full shadow-sm"
-              aria-label="Sign up to start building"
-            >
-              <Link href="/sign-up">
-                <ArrowUp className="size-4" />
-                <span className="sr-only">Sign up to start building</span>
-              </Link>
-            </Button>
-          </SignedOut>
-
-          <SignedIn>
-            <Button
-              type="button"
-              size="icon-sm"
-              onClick={openWorkspace}
-              className="size-8 rounded-full shadow-sm"
-              aria-label="Generate with Orin"
-            >
-              <ArrowUp className="size-4" />
-              <span className="sr-only">Generate with Orin</span>
-            </Button>
-          </SignedIn>
+          <Button
+            type="button"
+            size="icon-sm"
+            onClick={handleSubmit}
+            className="size-8 rounded-full shadow-sm"
+            aria-label="Generate with Orin"
+          >
+            <ArrowUp className="size-4" />
+            <span className="sr-only">Generate with Orin</span>
+          </Button>
         </div>
       </div>
     </div>

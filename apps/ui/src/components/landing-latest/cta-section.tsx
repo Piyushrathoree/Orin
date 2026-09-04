@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { SignedIn, SignedOut } from "@clerk/nextjs"
 
 export function CTASection() {
   return (
@@ -114,24 +113,13 @@ export function CTASection() {
             powerful AI tools
           </p>
         </div>
-        <SignedOut>
-          <Button
-            asChild
-            className="rounded-[99px] bg-secondary px-[30px] py-2 text-base font-medium leading-6 text-secondary-foreground shadow-[0px_0px_0px_4px_rgba(255,255,255,0.13)] transition-all duration-200 hover:bg-secondary/90"
-            size="lg"
-          >
-            <Link href="/sign-up">Signup for free</Link>
-          </Button>
-        </SignedOut>
-        <SignedIn>
-          <Button
-            asChild
-            className="rounded-[99px] bg-secondary px-[30px] py-2 text-base font-medium leading-6 text-secondary-foreground shadow-[0px_0px_0px_4px_rgba(255,255,255,0.13)] transition-all duration-200 hover:bg-secondary/90"
-            size="lg"
-          >
-            <Link href="/main">Open workspace</Link>
-          </Button>
-        </SignedIn>
+        <Button
+          asChild
+          className="rounded-[99px] bg-secondary px-[30px] py-2 text-base font-medium leading-6 text-secondary-foreground shadow-[0px_0px_0px_4px_rgba(255,255,255,0.13)] transition-all duration-200 hover:bg-secondary/90"
+          size="lg"
+        >
+          <Link href="/main">Open workspace</Link>
+        </Button>
       </div>
     </section>
   )
