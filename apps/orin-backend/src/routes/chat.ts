@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { callGroq } from '../services/ai.service';
+import { callAI } from '../services/ai.service';
 import { getSystemPrompt } from '../prompts';
+import { config } from '../config/environment';
 import { AIMessage, ChatResponse, ErrorResponse } from '../types';
 
 const router = Router();
@@ -37,7 +38,7 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    const groqMessages: AIMessage[] = [
+    const providerMessages: AIMessage[] = [
       {
         role: 'system',
         content: getSystemPrompt(),
@@ -45,7 +46,7 @@ router.post('/', async (req, res) => {
       ...messages,
     ];
 
-    const output = await callGroq(groqMessages, MAX_COMPLETION_TOKENS);
+    const output = await callAI(providerMessages, MAX_COMPLETION_TOKENS);
 
     const response: ChatResponse = {
       response: output,
@@ -54,7 +55,12 @@ router.post('/', async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('[Orin API] Chat request failed:', error);
-    const errorResponse: ErrorResponse = { error: 'Failed to process chat request' };
+    const errorResponse: ErrorResponse = {
+      error:
+        config.nodeEnv !== 'production' && error instanceof Error
+          ? error.message
+          : 'Failed to process chat request',
+    };
     res.status(500).json(errorResponse);
   }
 });
