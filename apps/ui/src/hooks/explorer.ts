@@ -2,14 +2,20 @@ import { useIDEStore } from "@/stores/ideStore";
 import type { FileSystemTree } from "@webcontainer/api";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { projectFiles } from "@/data/project-file";
+import {
+  DEFAULT_PROJECT_NAME,
+  getDefaultExpandedFolders,
+  getLegacyProjectStorageKey,
+  getPreviousProjectStorageKey,
+  getProjectStorageKey,
+  resolveProjectTree,
+  sanitizeProjectName,
+  TEMPLATE_VERSION_STORAGE_KEY,
+  PROJECT_TEMPLATE_VERSION,
+} from "@/data/project-file";
 import type { TabInfo } from "./topbar";
 
-const PROJECT_STORAGE_PREFIX = "orin:project:";
-
-function storageKey(projectId?: string) {
-  return `${PROJECT_STORAGE_PREFIX}${projectId || "scratch"}`;
-}
+const PROJECTS_STORAGE_KEY = "orin:projects";
 
 function readProjectTree(key: string): FileSystemTree | null {
   if (typeof window === "undefined") return null;
@@ -20,6 +26,22 @@ function readProjectTree(key: string): FileSystemTree | null {
   } catch (error) {
     console.warn("[Orin UI] Could not read the local project:", error);
     return null;
+  }
+}
+
+function readFolderNameForProject(projectId?: string): string {
+  if (!projectId || typeof window === "undefined") return DEFAULT_PROJECT_NAME;
+
+  try {
+    const stored = window.localStorage.getItem(PROJECTS_STORAGE_KEY);
+    const parsed = stored ? (JSON.parse(stored) as unknown) : [];
+    const projects = Array.isArray(parsed)
+      ? (parsed as Array<{ id?: string; name?: string }>)
+      : [];
+    const match = projects.find((project) => project.id === projectId);
+    return sanitizeProjectName(match?.name ?? DEFAULT_PROJECT_NAME);
+  } catch {
+    return DEFAULT_PROJECT_NAME;
   }
 }
 
@@ -132,24 +154,47 @@ export const useExplorer = ({
     setActiveTab,
     refreshPreview,
   } = useIDEStore();
-  const projectKey = storageKey(projectId);
+  const projectKey = getProjectStorageKey(projectId);
   const [storageLoaded, setStorageLoaded] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-    new Set(["vanilla-web-app", "vanilla-web-app/public"]),
+    () => getDefaultExpandedFolders(fileStructure),
   );
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
   useEffect(() => {
-    const savedTree = readProjectTree(projectKey);
+    const currentTree = readProjectTree(projectKey);
+    const previousKey = getPreviousProjectStorageKey(projectId);
+    const previousTree = currentTree ? null : readProjectTree(previousKey);
+    const legacyKey = getLegacyProjectStorageKey(projectId);
+    const legacyTree =
+      currentTree || previousTree ? null : readProjectTree(legacyKey);
+    const savedTree = currentTree ?? previousTree ?? legacyTree;
     // Hydrate the shared editor store from browser storage after mounting.
     /* eslint-disable react-hooks/set-state-in-effect */
-    setFileStructure(savedTree ?? (projectFiles as unknown as FileSystemTree));
+    const tree = resolveProjectTree(
+      savedTree,
+      readFolderNameForProject(projectId),
+    );
+    setFileStructure(tree);
+    setExpandedFolders(getDefaultExpandedFolders(tree));
     setOpenTabs([]);
     setCurrentTabId(null);
     setSelectedFile(null);
     setStorageLoaded(true);
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [projectKey, setCurrentTabId, setFileStructure, setOpenTabs]);
+
+    try {
+      window.localStorage.setItem(
+        TEMPLATE_VERSION_STORAGE_KEY,
+        String(PROJECT_TEMPLATE_VERSION),
+      );
+      window.localStorage.removeItem(legacyKey);
+      window.localStorage.removeItem(previousKey);
+      writeProjectTree(projectKey, tree);
+    } catch {
+      // Persistence is best-effort; the in-memory Vite tree still boots.
+    }
+  }, [projectId, projectKey, setCurrentTabId, setFileStructure, setOpenTabs]);
 
   useEffect(() => {
     if (storageLoaded) writeProjectTree(projectKey, fileStructure);

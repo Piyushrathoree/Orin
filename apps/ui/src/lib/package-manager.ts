@@ -10,6 +10,27 @@ export interface PackageCommand {
 }
 
 type FsLike = Pick<WebContainer["fs"], "readFile" | "readdir">;
+type WritableFs = Pick<WebContainer["fs"], "readFile" | "readdir" | "writeFile">;
+
+const VITE_CONFIG_FILES = [
+  "vite.config.ts",
+  "vite.config.js",
+  "vite.config.mts",
+  "vite.config.mjs",
+] as const;
+
+const NEXT_CONFIG_FILES = [
+  "next.config.ts",
+  "next.config.js",
+  "next.config.mjs",
+  "next.config.cjs",
+] as const;
+
+export const WEBCONTAINER_VITE_DEV_COMMAND: PackageCommand = {
+  command: "npx",
+  args: ["vite", "--host", "0.0.0.0", "--port", "3000"],
+  label: "vite --host 0.0.0.0 --port 3000",
+};
 
 function joinPath(root: string, ...parts: string[]): string {
   if (root === "/") {
@@ -36,13 +57,24 @@ async function dirExists(fs: FsLike, path: string): Promise<boolean> {
   }
 }
 
+const SKIP_ROOT_DIRS = new Set(["node_modules", "proc", "sys", "dev", "tmp"]);
+
 export async function getProjectRoot(fs: FsLike): Promise<string | null> {
   if (await fileExists(fs, "/package.json")) {
     return "/";
   }
 
-  if (await fileExists(fs, "/vanilla-web-app/package.json")) {
-    return "/vanilla-web-app";
+  try {
+    const entries = await fs.readdir("/");
+    for (const entry of entries) {
+      const name = typeof entry === "string" ? entry : String(entry);
+      if (!name || name.startsWith(".") || SKIP_ROOT_DIRS.has(name)) continue;
+      if (await fileExists(fs, `/${name}/package.json`)) {
+        return `/${name}`;
+      }
+    }
+  } catch {
+    // fall through
   }
 
   return null;
@@ -100,27 +132,103 @@ export function getInstallCommand(manager: PackageManager): PackageCommand {
   }
 }
 
-export function getDevCommand(manager: PackageManager): PackageCommand {
-  switch (manager) {
-    case "pnpm":
-      return {
-        command: "npx",
-        args: ["pnpm", "run", "dev"],
-        label: "pnpm run dev",
-      };
-    case "bun":
-      return {
-        command: "npm",
-        args: ["run", "dev"],
-        label: "npm run dev",
-      };
-    default:
-      return {
-        command: "npm",
-        args: ["run", "dev"],
-        label: "npm run dev",
-      };
+async function readPackageJson(
+  fs: FsLike,
+  projectRoot: string,
+): Promise<{
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
+} | null> {
+  try {
+    const raw = await fs.readFile(joinPath(projectRoot, "package.json"), "utf-8");
+    return JSON.parse(raw) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+    };
+  } catch {
+    return null;
   }
+}
+
+async function isViteProject(
+  fs: FsLike,
+  projectRoot: string,
+): Promise<boolean> {
+  for (const name of VITE_CONFIG_FILES) {
+    if (await fileExists(fs, joinPath(projectRoot, name))) {
+      return true;
+    }
+  }
+
+  const pkg = await readPackageJson(fs, projectRoot);
+  if (!pkg) return false;
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  return Boolean(deps.vite || pkg.scripts?.dev?.includes("vite"));
+}
+
+async function isNextProject(
+  fs: FsLike,
+  projectRoot: string,
+): Promise<boolean> {
+  for (const name of NEXT_CONFIG_FILES) {
+    if (await fileExists(fs, joinPath(projectRoot, name))) {
+      return true;
+    }
+  }
+
+  const pkg = await readPackageJson(fs, projectRoot);
+  if (!pkg) return false;
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  return Boolean(deps.next || pkg.scripts?.dev?.includes("next"));
+}
+
+/** Strip `next` from package.json so a leftover Next script cannot auto-start. */
+async function rewriteNextDevScriptToVite(
+  fs: WritableFs,
+  projectRoot: string,
+): Promise<void> {
+  const pkg = await readPackageJson(fs, projectRoot);
+  if (!pkg) return;
+
+  let changed = false;
+  if (pkg.scripts?.dev?.includes("next")) {
+    pkg.scripts.dev = WEBCONTAINER_VITE_DEV_COMMAND.label;
+    changed = true;
+  }
+  if (pkg.dependencies?.next) {
+    delete pkg.dependencies.next;
+    changed = true;
+  }
+  if (pkg.devDependencies?.next) {
+    delete pkg.devDependencies.next;
+    changed = true;
+  }
+
+  if (!changed) return;
+
+  await fs.writeFile(
+    joinPath(projectRoot, "package.json"),
+    `${JSON.stringify(pkg, null, 2)}\n`,
+  );
+}
+
+export async function getWebContainerDevCommand(
+  fs: WritableFs,
+  projectRoot: string,
+): Promise<PackageCommand> {
+  if (await isNextProject(fs, projectRoot)) {
+    await rewriteNextDevScriptToVite(fs, projectRoot);
+  }
+
+  if (await isViteProject(fs, projectRoot)) {
+    return WEBCONTAINER_VITE_DEV_COMMAND;
+  }
+
+  throw new Error(
+    "WebContainer auto-start requires Vite. Next.js is not supported in this sandbox.",
+  );
 }
 
 export async function needsInstall(
@@ -155,68 +263,73 @@ function treeHasFile(tree: FileSystemTree, targetPath: string): boolean {
   return false;
 }
 
-function readPackageManagerField(tree: FileSystemTree): PackageManager | null {
-  const readJsonAt = (pathParts: string[]): PackageManager | null => {
-    let current: FileSystemTree = tree;
-    for (let index = 0; index < pathParts.length; index += 1) {
-      const part = pathParts[index];
-      const node = current[part];
-      if (!node) return null;
+function getTreeProjectRootParts(tree: FileSystemTree): string[] {
+  if (treeHasFile(tree, "package.json")) return [];
 
-      const isFile = index === pathParts.length - 1;
-      if (isFile) {
-        if (!("file" in node)) return null;
-        const fileNode = node.file;
-        const contents =
-          typeof fileNode === "string"
-            ? fileNode
-            : "contents" in fileNode && typeof fileNode.contents === "string"
-              ? fileNode.contents
-              : null;
-        if (!contents) return null;
-
-        try {
-          const pkg = JSON.parse(contents) as { packageManager?: string };
-          const manager = pkg.packageManager?.split("@")[0]?.trim();
-          if (manager === "pnpm" || manager === "bun" || manager === "npm") {
-            return manager;
-          }
-        } catch {
-          return null;
-        }
-        return null;
-      }
-
-      if (!("directory" in node)) return null;
-      current = node.directory;
+  for (const [name, node] of Object.entries(tree)) {
+    if (node && "directory" in node && treeHasFile(node.directory, "package.json")) {
+      return [name];
     }
-    return null;
-  };
+  }
 
-  return readJsonAt(["package.json"]) ?? readJsonAt(["vanilla-web-app", "package.json"]);
+  return [];
 }
 
-/** Detect package manager from the persisted project tree (for UI hints). */
-export function detectPackageManagerFromTree(
-  tree: FileSystemTree,
-): PackageManager {
-  if (
-    treeHasFile(tree, "bun.lockb") ||
-    treeHasFile(tree, "bun.lock") ||
-    treeHasFile(tree, "vanilla-web-app/bun.lockb") ||
-    treeHasFile(tree, "vanilla-web-app/bun.lock")
-  ) {
-    return "bun";
+export function getProjectRootFromTree(tree: FileSystemTree): string | null {
+  if (treeHasFile(tree, "package.json")) return "/";
+  const parts = getTreeProjectRootParts(tree);
+  return parts.length > 0 ? `/${parts.join("/")}` : null;
+}
+
+/** Split a raw command on top-level `&&` / `;`. Quotes are respected; pipes are not. */
+export function splitShellCommandChain(rawCommand: string): string[] {
+  const segments: string[] = [];
+  let current = "";
+  let quote: '"' | "'" | null = null;
+
+  for (let index = 0; index < rawCommand.length; index += 1) {
+    const char = rawCommand[index];
+
+    if (quote) {
+      current += char;
+      if (char === quote) quote = null;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+
+    if (char === ";") {
+      const trimmed = current.trim();
+      if (trimmed) segments.push(trimmed);
+      current = "";
+      continue;
+    }
+
+    if (char === "&" && rawCommand[index + 1] === "&") {
+      const trimmed = current.trim();
+      if (trimmed) segments.push(trimmed);
+      current = "";
+      index += 1;
+      continue;
+    }
+
+    current += char;
   }
 
-  if (
-    treeHasFile(tree, "pnpm-lock.yaml") ||
-    treeHasFile(tree, "vanilla-web-app/pnpm-lock.yaml")
-  ) {
-    return "pnpm";
-  }
+  const trimmed = current.trim();
+  if (trimmed) segments.push(trimmed);
+  return segments;
+}
 
-  return readPackageManagerField(tree) ?? "npm";
+export function isDevServerCommand(command: string): boolean {
+  const normalized = command.trim().toLowerCase();
+  if (/\b(npm|pnpm|yarn|bun)(?:\s+run)?\s+dev\b/.test(normalized)) return true;
+  if (/\bnext\s+dev\b/.test(normalized)) return true;
+  return /\bvite\b/.test(normalized) && !/\bvite\s+build\b/.test(normalized);
 }
 
 export function parseShellCommand(rawCommand: string): PackageCommand {

@@ -1,15 +1,7 @@
 import { create } from "zustand";
 import { FileSystemTree, WebContainer } from "@webcontainer/api";
 import { EditorView } from "@codemirror/view";
-import { projectFiles } from "@/data/project-file";
-
-export interface TabInfo {
-  id: string;
-  name: string;
-  path: string;
-  isDirty: boolean;
-  content: string;
-}
+import { createProjectFiles } from "@/data/project-file";
 
 interface IDEStore {
   fileStructure: FileSystemTree;
@@ -44,7 +36,7 @@ interface IDEStore {
 
 const createIDEStore = () =>
   create<IDEStore>((set) => ({
-    fileStructure: projectFiles as unknown as FileSystemTree,
+    fileStructure: createProjectFiles(),
     setFileStructure: (updater) =>
       set((state) => ({
         fileStructure:
@@ -77,6 +69,10 @@ const createIDEStore = () =>
     setPreviewDevice: (device) => set({ previewDevice: device }),
   }));
 
+declare global {
+  var __IDE_STORE_V3__: ReturnType<typeof createIDEStore> | undefined;
+}
+
 export const useIDEStore =
-  (globalThis as any).__IDE_STORE_V3__ ??
-  ((globalThis as any).__IDE_STORE_V3__ = createIDEStore());
+  globalThis.__IDE_STORE_V3__ ??
+  (globalThis.__IDE_STORE_V3__ = createIDEStore());
