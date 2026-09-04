@@ -3,7 +3,7 @@ import {
   SiTypescript,
   SiJavascript,
   SiHtml5,
-  SiCss3,
+  SiCss,
   SiJson,
   SiMarkdown,
   SiReact,
@@ -47,7 +47,7 @@ export const FileIconCustom = ({ filename, className = "size-4" }: FileIconProps
     case "html":
       return <SiHtml5 className={cn(iconClass, "text-[#E34F26]")} />;
     case "css":
-      return <SiCss3 className={cn(iconClass, "text-[#1572B6]")} />;
+      return <SiCss className={cn(iconClass, "text-[#1572B6]")} />;
     case "json":
       return <SiJson className={cn(iconClass, "text-[#CBCB41]")} />;
     case "md":
