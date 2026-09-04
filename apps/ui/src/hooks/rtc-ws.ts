@@ -3,6 +3,30 @@ import { toast } from "sonner";
 
 type OnMessageCallback = (payload: string, fromPeerId?: string) => void;
 
+export type CodeFile = {
+  path: string;
+  content: string;
+};
+
+export type CodeSnapshot = {
+  files: CodeFile[];
+  directories: string[];
+};
+
+export type CodeSyncEvent =
+  | { type: "code-sync-owner" }
+  | { type: "code-sync-request" }
+  | { type: "code-snapshot"; revision: number; snapshot: CodeSnapshot }
+  | {
+      type: "code-update";
+      revision: number;
+      path: string;
+      content: string | null;
+    }
+  | { type: "code-ack"; revision: number };
+
+type CodeSyncCallback = (event: CodeSyncEvent) => void | Promise<void>;
+
 export type PeerMessage = {
   id: string;
   role: "user" | "assistant";
@@ -15,6 +39,9 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
   const [peerMessages, setPeerMessages] = useState<PeerMessage[]>([]);
 
   const messageCallbackRef = useRef<OnMessageCallback | null>(null);
+  const codeEventCallbackRef = useRef<CodeSyncCallback | null>(null);
+  const pendingCodeEventsRef = useRef<CodeSyncEvent[]>([]);
+  const joinedRoomRef = useRef(false);
   const ws = useRef<WebSocket | null>(null);
   const pc = useRef<RTCPeerConnection | null>(null);
   const channel = useRef<RTCDataChannel | undefined>(undefined);
@@ -72,7 +99,7 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
   const pause = async () => {
     await new Promise<void>((resolve) => {
       const check = () => {
-        if (channel.current?.bufferedAmount! < MIN_MEMORY) {
+        if (!channel.current || channel.current.bufferedAmount < MIN_MEMORY) {
           resolve();
         } else {
           setTimeout(check, 50);
@@ -82,7 +109,7 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
     });
   };
 
-  const onMessageHandler = (e: any) => {
+  const onMessageHandler = (e: MessageEvent) => {
     if (typeof e.data === "string") {
       if (e.data === "ACK") {
         inFlightChunk.current = Math.max(0, inFlightChunk.current - 1);
@@ -96,7 +123,7 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
         const fileName = e.data.split("/");
         fileNameRef.current = fileName[1];
         let offset = 0;
-        let finalFile = new Uint8Array(reciverSize.current);
+        const finalFile = new Uint8Array(reciverSize.current);
         for (const chunk of recivedData.current) {
           finalFile.set(chunk, offset);
           offset += chunk.length;
@@ -119,9 +146,20 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
     channel.current?.send("ACK");
   };
 
+  const emitCodeEvent = (event: CodeSyncEvent) => {
+    if (codeEventCallbackRef.current) {
+      void codeEventCallbackRef.current(event);
+    } else {
+      pendingCodeEventsRef.current.push(event);
+    }
+  };
+
   useEffect(() => {
-    ws.current = new WebSocket("ws://localhost:8080");
+    ws.current = new WebSocket(
+      process.env.NEXT_PUBLIC_WS_URL?.trim() || "ws://localhost:8080",
+    );
     ws.current.onopen = () => {
+      joinedRoomRef.current = false;
       if (roomId && ws.current?.readyState === WebSocket.OPEN)
         ws.current?.send(JSON.stringify({ type: "join", roomId }));
     };
@@ -180,10 +218,77 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
     };
 
     ws.current.onmessage = async (message) => {
-      const data = JSON.parse(message.data);
+      let data: {
+        type?: string;
+        payload?: string;
+        message?: string;
+        fromPeerId?: string;
+        offer?: RTCSessionDescriptionInit;
+        answer?: RTCSessionDescriptionInit;
+        candidate?: RTCIceCandidateInit;
+        count?: number;
+        roomId?: string;
+        revision?: number;
+        files?: CodeFile[];
+        directories?: string[];
+        path?: string;
+        content?: string | null;
+      };
+      try {
+        data = JSON.parse(String(message.data)) as typeof data;
+      } catch {
+        console.warn("[Orin UI] Ignored a malformed WebSocket message");
+        return;
+      }
+      if (!data || typeof data !== "object") return;
+
+      if (data.type === "joined") {
+        joinedRoomRef.current = true;
+        return;
+      }
+      if (data.type === "code-sync-owner" || data.type === "code-sync-request") {
+        emitCodeEvent({ type: data.type });
+        return;
+      }
+      if (
+        data.type === "code-snapshot" &&
+        typeof data.revision === "number" &&
+        Array.isArray(data.files)
+      ) {
+        emitCodeEvent({
+          type: "code-snapshot",
+          revision: data.revision,
+          snapshot: {
+            files: data.files,
+            directories: Array.isArray(data.directories)
+              ? data.directories
+              : [],
+          },
+        });
+        return;
+      }
+      if (
+        data.type === "code-update" &&
+        typeof data.revision === "number" &&
+        typeof data.path === "string" &&
+        (data.content === null || typeof data.content === "string")
+      ) {
+        emitCodeEvent({
+          type: "code-update",
+          revision: data.revision,
+          path: data.path,
+          content: data.content,
+        });
+        return;
+      }
+      if (data.type === "code-ack" && typeof data.revision === "number") {
+        emitCodeEvent({ type: "code-ack", revision: data.revision });
+        return;
+      }
 
       if (data.type === "message") {
         const payload = data.payload || data.message;
+        if (typeof payload !== "string") return;
 
         setPeerMessages((prev) => [
           ...prev,
@@ -200,17 +305,20 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
         }
       }
       if (data.type === "offer") {
+        if (!data.offer) return;
         await pc.current?.setRemoteDescription(
           new RTCSessionDescription(data.offer),
         );
         await answer();
       }
       if (data.type === "answer") {
+        if (!data.answer) return;
         await pc.current?.setRemoteDescription(
           new RTCSessionDescription(data.answer),
         );
       }
       if (data.type === "candidate") {
+        if (!data.candidate) return;
         await pc.current?.addIceCandidate(new RTCIceCandidate(data.candidate));
       }
       if (data.type === "toast") {
@@ -220,14 +328,18 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
         await offer();
       }
       if (data.type === "user-count") {
-        setTotalUserCount(data.count);
+        if (typeof data.count === "number") setTotalUserCount(data.count);
       }
+    };
+    ws.current.onclose = () => {
+      joinedRoomRef.current = false;
     };
 
     return () => {
       if (localStreams.current) {
         localStreams.current.getTracks().forEach((track) => track.stop());
       }
+      joinedRoomRef.current = false;
       pc.current?.close();
       ws.current?.close();
     };
@@ -395,7 +507,9 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
 
     for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
       if (PAUSE_STREAMING.current === true) await pauseTillStreamFalse();
-      if (channel.current?.bufferedAmount! > MAX_MEMORY) await pause();
+      if (channel.current && channel.current.bufferedAmount > MAX_MEMORY) {
+        await pause();
+      }
 
       while (inFlightChunk.current >= ACK_WINDOW) {
         await new Promise<void>((r) => setTimeout(r, 50));
@@ -411,10 +525,11 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
   };
 
   const sendFileContent = () => {
-    if (ws.current === null) return;
+    if (ws.current === null || ws.current.readyState !== WebSocket.OPEN) return;
     ws.current.send(
       JSON.stringify({
         type: "FileContent",
+        roomId,
         FileContent: "Hello, this is a test file content!",
       }),
     );
@@ -441,12 +556,55 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
     );
   };
 
+  const sendCodeMessage = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (
+        !roomId ||
+        !joinedRoomRef.current ||
+        !ws.current ||
+        ws.current.readyState !== WebSocket.OPEN
+      ) {
+        return false;
+      }
+
+      ws.current.send(JSON.stringify({ ...payload, roomId }));
+      return true;
+    },
+    [roomId],
+  );
+
+  const sendCodeInit = useCallback(
+    (snapshot: CodeSnapshot) =>
+      sendCodeMessage({ type: "code-init", ...snapshot }),
+    [sendCodeMessage],
+  );
+
+  const sendCodeSnapshot = useCallback(
+    (snapshot: CodeSnapshot) =>
+      sendCodeMessage({ type: "code-snapshot", ...snapshot }),
+    [sendCodeMessage],
+  );
+
+  const sendCodeUpdate = useCallback(
+    (path: string, content: string | null) =>
+      sendCodeMessage({ type: "code-update", path, content }),
+    [sendCodeMessage],
+  );
+
   const setMessageCallback = useCallback(
     (callback: OnMessageCallback | null) => {
       messageCallbackRef.current = callback;
     },
     [],
   );
+
+  const setCodeEventCallback = useCallback((callback: CodeSyncCallback | null) => {
+    codeEventCallbackRef.current = callback;
+    if (!callback) return;
+
+    const pendingEvents = pendingCodeEventsRef.current.splice(0);
+    for (const event of pendingEvents) void callback(event);
+  }, []);
 
   return {
     ws,
@@ -477,6 +635,10 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
     peerMessages,
     setPeerMessages,
     setMessageCallback,
+    setCodeEventCallback,
+    sendCodeInit,
+    sendCodeSnapshot,
+    sendCodeUpdate,
     isAudioEnabled,
     isVideoEnabled,
     isInCall,
@@ -487,3 +649,4 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
   };
 };
 
+export type WsRtcConnection = ReturnType<typeof useWsRtcConnection>;

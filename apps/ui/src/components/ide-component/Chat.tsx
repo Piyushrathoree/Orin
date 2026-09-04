@@ -7,14 +7,16 @@ import PeerChat from "./peer-chat";
 import type { ComposerContextFile } from "./prompt-composer";
 import type { FileSystemTree } from "@webcontainer/api";
 import type { OrinAction } from "@/lib/orin-artifact";
+import type { WsRtcConnection } from "@/hooks/rtc-ws";
 
 interface ChatProps {
   onClose: () => void;
   projectId?: string;
-  roomConnection: any;
+  roomConnection: WsRtcConnection;
   fileStructure: FileSystemTree;
   onActionsGenerated?: (actions: OrinAction[]) => Promise<void> | void;
   currentFile?: ComposerContextFile | null;
+  runtimeReady?: boolean;
 }
 
 const Chat: React.FC<ChatProps> = ({
@@ -24,6 +26,7 @@ const Chat: React.FC<ChatProps> = ({
   fileStructure,
   onActionsGenerated,
   currentFile = null,
+  runtimeReady = true,
 }) => {
   const [activeTab, setActiveTab] = useState<"ai" | "peer">("ai");
 
@@ -80,6 +83,7 @@ const Chat: React.FC<ChatProps> = ({
             fileStructure={fileStructure}
             onActionsGenerated={onActionsGenerated}
             currentFile={currentFile}
+            runtimeReady={runtimeReady}
           />
         </div>
         <div

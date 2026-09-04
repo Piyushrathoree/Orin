@@ -1,160 +1,273 @@
-import express from "express";
 import { WebSocketServer } from "ws";
+import type { RawData, WebSocket } from "ws";
+import {
+  MAX_CODE_FILES,
+  MAX_CODE_PATH_LENGTH,
+  MAX_CODE_SNAPSHOT_SIZE,
+  parseClientMessage,
+  type ClientMessage,
+  type CodeFile,
+} from "./protocol";
 
-const wss = new WebSocketServer({ port: 8080 });
+type RoomState = {
+  clients: Set<WebSocket>;
+  codeFiles: Map<string, string>;
+  codeDirectories: Set<string>;
+  codeInitialized: boolean;
+  revision: number;
+};
 
-const rooms = new Map<string, WebSocket[]>();
+const requestedPort = Number.parseInt(process.env.PORT ?? "8080", 10);
+const port = Number.isFinite(requestedPort) ? requestedPort : 8080;
+const wss = new WebSocketServer({
+  port,
+  maxPayload:
+    MAX_CODE_SNAPSHOT_SIZE +
+    2 * MAX_CODE_FILES * MAX_CODE_PATH_LENGTH +
+    64 * 1024,
+});
 
-wss.on("connection", function connection(ws: any) {
-  ws.on("message", function (data: any) {
-    const message = JSON.parse(data.toString());
+const rooms = new Map<string, RoomState>();
+const socketRooms = new Map<WebSocket, string>();
 
-    if (message.type === "FileContent") {
-      const clients = rooms.get(message.roomId);
-      if (clients === undefined) return;
-      clients.forEach((client) => {
-        if (client !== ws && client.readyState === 1) {
-          client.send(
-            JSON.stringify({
-              type: "FileContent",
-              FileContent: message.FileContent,
-              pos: message.CursorPos,
-            }),
-          );
-        }
+function send(ws: WebSocket, payload: Record<string, unknown>) {
+  if (ws.readyState === 1) ws.send(JSON.stringify(payload));
+}
+
+function getRoomForSocket(ws: WebSocket, roomId: string): RoomState | undefined {
+  if (socketRooms.get(ws) !== roomId) return undefined;
+  return rooms.get(roomId);
+}
+
+function broadcast(
+  room: RoomState,
+  payload: Record<string, unknown>,
+  except?: WebSocket,
+) {
+  for (const client of room.clients) {
+    if (client !== except) send(client, payload);
+  }
+}
+
+function snapshotFiles(room: RoomState): CodeFile[] {
+  return Array.from(room.codeFiles, ([path, content]) => ({ path, content }));
+}
+
+function sendCodeSnapshot(ws: WebSocket, roomId: string, room: RoomState) {
+  send(ws, {
+    type: "code-snapshot",
+    roomId,
+    revision: room.revision,
+    files: snapshotFiles(room),
+    directories: Array.from(room.codeDirectories),
+  });
+}
+
+function leaveRoom(ws: WebSocket) {
+  const roomId = socketRooms.get(ws);
+  if (!roomId) return;
+
+  socketRooms.delete(ws);
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  room.clients.delete(ws);
+  if (room.clients.size === 0) {
+    rooms.delete(roomId);
+    return;
+  }
+
+  broadcast(room, { type: "user-count", count: room.clients.size });
+}
+
+function applySnapshot(
+  room: RoomState,
+  files: CodeFile[],
+  directories: string[],
+) {
+  room.codeFiles = new Map(files.map((file) => [file.path, file.content]));
+  room.codeDirectories = new Set(directories);
+  room.codeInitialized = true;
+  room.revision += 1;
+}
+
+function relayPeerMessage(ws: WebSocket, message: ClientMessage) {
+  if (
+    message.type !== "message" &&
+    message.type !== "FileContent" &&
+    message.type !== "offer" &&
+    message.type !== "answer" &&
+    message.type !== "candidate"
+  ) {
+    return;
+  }
+
+  const room = getRoomForSocket(ws, message.roomId);
+  if (!room) return;
+
+  if (message.type === "message") {
+    broadcast(room, { type: "message", message: message.message }, ws);
+    return;
+  }
+
+  if (message.type === "FileContent") {
+    broadcast(
+      room,
+      {
+        type: "FileContent",
+        FileContent: message.FileContent,
+        pos: message.CursorPos,
+      },
+      ws,
+    );
+    return;
+  }
+
+  if (message.type === "offer") {
+    broadcast(
+      room,
+      { type: "offer", roomId: message.roomId, offer: message.offer },
+      ws,
+    );
+  } else if (message.type === "answer") {
+    broadcast(
+      room,
+      { type: "answer", roomId: message.roomId, answer: message.answer },
+      ws,
+    );
+  } else {
+    broadcast(
+      room,
+      {
+        type: "candidate",
+        roomId: message.roomId,
+        candidate: message.candidate,
+      },
+      ws,
+    );
+  }
+}
+
+function handleCodeMessage(
+  ws: WebSocket,
+  message: Extract<ClientMessage, { type: "code-init" | "code-snapshot" | "code-update" }>,
+) {
+  const room = getRoomForSocket(ws, message.roomId);
+  if (!room) return;
+
+  if (message.type === "code-update") {
+    if (!room.codeInitialized) return;
+
+    if (message.content === null) room.codeFiles.delete(message.path);
+    else room.codeFiles.set(message.path, message.content);
+    room.revision += 1;
+
+    broadcast(
+      room,
+      {
+        type: "code-update",
+        roomId: message.roomId,
+        revision: room.revision,
+        path: message.path,
+        content: message.content,
+      },
+      ws,
+    );
+    send(ws, { type: "code-ack", revision: room.revision });
+    return;
+  }
+
+  if (message.type === "code-init" && room.codeInitialized) {
+    sendCodeSnapshot(ws, message.roomId, room);
+    return;
+  }
+
+  applySnapshot(room, message.files, message.directories);
+  broadcast(
+    room,
+    {
+      type: "code-snapshot",
+      roomId: message.roomId,
+      revision: room.revision,
+      files: snapshotFiles(room),
+      directories: Array.from(room.codeDirectories),
+    },
+    ws,
+  );
+  send(ws, { type: "code-ack", revision: room.revision });
+}
+
+function joinRoom(ws: WebSocket, roomId: string) {
+  const currentRoomId = socketRooms.get(ws);
+  if (currentRoomId === roomId) return;
+
+  const existingRoom = rooms.get(roomId);
+  if (existingRoom && existingRoom.clients.size >= 2) {
+    send(ws, { type: "toast", message: "Room already filled" });
+    return;
+  }
+
+  if (currentRoomId) leaveRoom(ws);
+
+  const room = existingRoom ?? {
+    clients: new Set<WebSocket>(),
+    codeFiles: new Map<string, string>(),
+    codeDirectories: new Set<string>(),
+    codeInitialized: false,
+    revision: 0,
+  };
+
+  rooms.set(roomId, room);
+  room.clients.add(ws);
+  socketRooms.set(ws, roomId);
+
+  send(ws, { type: "joined", roomId });
+  send(ws, { type: "toast", message: `Connected to ${roomId}` });
+  broadcast(room, { type: "user-count", count: room.clients.size });
+
+  if (room.clients.size === 1) {
+    send(ws, { type: "code-sync-owner" });
+  } else if (room.codeInitialized) {
+    sendCodeSnapshot(ws, roomId, room);
+  } else {
+    broadcast(room, { type: "code-sync-request" }, ws);
+  }
+
+  if (room.clients.size === 2) {
+    const firstClient = Array.from(room.clients)[0];
+    if (firstClient && firstClient !== ws) {
+      send(firstClient, {
+        type: "send-offer",
+        message: "Peer joined, you can start the transfer!",
       });
+    }
+  }
+}
+
+wss.on("connection", (ws: WebSocket) => {
+  ws.on("message", (data: RawData) => {
+    const message = parseClientMessage(data.toString());
+    if (!message) return;
+
+    if (message.type === "join") {
+      joinRoom(ws, message.roomId);
       return;
     }
 
-    if (message.type === "join") {
-      if (!rooms.has(message.roomId)) {
-        rooms.set(message.roomId, []);
-      }
-
-      const clients = rooms.get(message.roomId);
-      if (clients === undefined) return;
-
-      if (clients.length >= 2) {
-        ws.send(
-          JSON.stringify({
-            type: "toast",
-            message: `Room already filled`,
-          }),
-        );
-        return;
-      }
-
-      clients.push(ws);
-      ws.send(
-        JSON.stringify({
-          type: "toast",
-          message: `Connected to ${message.roomId}`,
-        }),
-      );
-
-      clients.forEach((client) => {
-        if (client.readyState === 1)
-          client.send(
-            JSON.stringify({
-              type: "user-count",
-              count: clients.length,
-            }),
-          );
-      });
-
-      const firstUser = clients[0];
-      if (clients.length === 2 && firstUser.readyState === 1) {
-        firstUser.send(
-          JSON.stringify({
-            type: "send-offer",
-            message: "Peer joined, you can start the transfer!",
-          }),
-        );
-      }
+    if (
+      message.type === "code-init" ||
+      message.type === "code-snapshot" ||
+      message.type === "code-update"
+    ) {
+      handleCodeMessage(ws, message);
+      return;
     }
 
-    if (message.type === "message") {
-      const clients = rooms.get(message.roomId);
-      if (clients === undefined) return;
-      clients.forEach((client) => {
-        if (client !== ws && client.readyState === 1) {
-          client.send(
-            JSON.stringify({
-              type: "message",
-              message: message.message,
-            }),
-          );
-        }
-      });
-    }
-
-    if (message.type === "offer") {
-      const clients = rooms.get(message.roomId);
-      if (clients === undefined) return;
-
-      clients.forEach((client) => {
-        if (client !== ws && client.readyState === 1) {
-          client.send(
-            JSON.stringify({
-              type: "offer",
-              offer: message.offer,
-              roomId: message.roomId,
-            }),
-          );
-        }
-      });
-    }
-
-    if (message.type === "answer") {
-      const clients = rooms.get(message.roomId);
-      if (clients === undefined) return;
-
-      clients.forEach((client) => {
-        if (client !== ws && client.readyState === 1) {
-          client.send(
-            JSON.stringify({ type: "answer", answer: message.answer }),
-          );
-        }
-      });
-    }
-
-    if (message.type === "candidate") {
-      const clients = rooms.get(message.roomId);
-      if (clients === undefined) return;
-
-      clients.forEach((client) => {
-        if (client !== ws && client.readyState === 1) {
-          client.send(
-            JSON.stringify({ type: "candidate", candidate: message.candidate }),
-          );
-        }
-      });
-    }
+    relayPeerMessage(ws, message);
   });
 
-  ws.on("close", () => {
-    rooms.forEach((client, roomId) => {
-      rooms.set(
-        roomId,
-        client.filter((c) => c !== ws),
-      );
-      rooms.get(roomId)?.forEach((client) => {
-        if (client.readyState === 1)
-          client.send(
-            JSON.stringify({
-              type: "user-count",
-              count: rooms.get(roomId)?.length,
-            }),
-          );
-      });
-    });
-  });
+  ws.on("close", () => leaveRoom(ws));
+  ws.on("error", () => leaveRoom(ws));
 });
 
-const app = express();
-
-app.get("/", (req, res) => {
-  res.send("Hello World!");
-});
-
-app.listen(3000);
+console.log(`[Orin WS] Listening on ws://localhost:${port}`);

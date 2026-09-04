@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { IdePromptComposer } from "./prompt-composer";
+import type { PeerMessage, WsRtcConnection } from "@/hooks/rtc-ws";
 
 interface SharedFile {
   id: string;
@@ -47,7 +48,7 @@ interface SharedFile {
 
 interface PeerChatProps {
   projectId?: string;
-  roomConnection: any;
+  roomConnection: WsRtcConnection;
 }
 
 const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
@@ -457,7 +458,7 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
                 
               </div>
             ) : (
-              peerMessages.map((msg: any, i: number) => {
+              peerMessages.map((msg: PeerMessage, i: number) => {
                 const isUser = msg.role === "user";
                 const showGap =
                   i === 0 || peerMessages[i - 1]?.role !== msg.role;
