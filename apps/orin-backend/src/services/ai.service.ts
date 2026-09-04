@@ -1,7 +1,22 @@
 import { config } from '../config/environment';
 import { AIMessage } from '../types';
 
-type GroqResponse = {
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+    finishReason?: string;
+  }>;
+  promptFeedback?: {
+    blockReason?: string;
+  };
+  error?: {
+    message?: string;
+  };
+};
+
+type OpenAICompatibleResponse = {
   choices?: Array<{
     message?: {
       content?: string | null;
@@ -12,39 +27,122 @@ type GroqResponse = {
   };
 };
 
-export async function callGroq(messages: AIMessage[], maxTokens: number): Promise<string> {
+function validateMessages(messages: AIMessage[]) {
   if (messages.length === 0) {
     throw new Error('At least one message is required.');
   }
+}
 
-  if (!config.groqApiKey) {
-    throw new Error('GROQ_API_KEY is not configured.');
+async function readJson<T>(response: Response): Promise<T> {
+  const body = await response.text();
+
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    return {} as T;
+  }
+}
+
+async function callGemini(messages: AIMessage[], maxTokens: number): Promise<string> {
+  validateMessages(messages);
+
+  if (!config.geminiApiKey) {
+    throw new Error('GEMINI_API_KEY is not configured.');
   }
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.groqApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: config.groqModel,
-      messages,
-      max_completion_tokens: maxTokens,
-      temperature: 0.2,
-    }),
-    signal: AbortSignal.timeout(120_000),
-  });
+  const systemMessage = messages.find((message) => message.role === 'system')?.content;
+  const contents = messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => ({
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: message.content }],
+    }));
 
-  const payload = (await response.json()) as GroqResponse;
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.geminiModel)}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': config.geminiApiKey,
+      },
+      body: JSON.stringify({
+        ...(systemMessage
+          ? { systemInstruction: { parts: [{ text: systemMessage }] } }
+          : {}),
+        contents,
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature: 0.2,
+        },
+      }),
+      signal: AbortSignal.timeout(120_000),
+    },
+  );
+
+  const payload = await readJson<GeminiResponse>(response);
   if (!response.ok) {
-    throw new Error(payload.error?.message || `Groq request failed with status ${response.status}.`);
+    throw new Error(
+      payload.error?.message
+        || payload.promptFeedback?.blockReason
+        || `Gemini request failed with status ${response.status}.`,
+    );
+  }
+
+  const content = payload.candidates?.[0]?.content?.parts
+    ?.map((part) => part.text || '')
+    .join('')
+    .trim();
+
+  if (!content) {
+    throw new Error(
+      payload.promptFeedback?.blockReason
+        || payload.candidates?.[0]?.finishReason
+        || 'Gemini returned an empty response.',
+    );
+  }
+
+  return content;
+}
+
+async function callLocal(messages: AIMessage[], maxTokens: number): Promise<string> {
+  validateMessages(messages);
+
+  const response = await fetch(
+    `${config.localBaseUrl.replace(/\/+$/, '')}/chat/completions`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.localApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: config.localModel,
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.2,
+      }),
+      signal: AbortSignal.timeout(120_000),
+    },
+  );
+
+  const payload = await readJson<OpenAICompatibleResponse>(response);
+  if (!response.ok) {
+    throw new Error(
+      payload.error?.message || `Local model request failed with status ${response.status}.`,
+    );
   }
 
   const content = payload.choices?.[0]?.message?.content?.trim();
   if (!content) {
-    throw new Error('Groq returned an empty response.');
+    throw new Error('Local model returned an empty response.');
   }
 
   return content;
+}
+
+export function callAI(messages: AIMessage[], maxTokens: number): Promise<string> {
+  return config.aiProvider === 'gemini'
+    ? callGemini(messages, maxTokens)
+    : callLocal(messages, maxTokens);
 }

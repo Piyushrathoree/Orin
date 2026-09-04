@@ -11,7 +11,6 @@ export interface AIMessage {
  */
 export interface TemplateResponse {
   prompts: string[];
-  uiPrompts: string[];
 }
 
 /**

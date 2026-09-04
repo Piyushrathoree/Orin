@@ -1,9 +1,15 @@
 const parsedPort = Number.parseInt(process.env.PORT ?? '3030', 10);
+const configuredProvider = process.env.AI_PROVIDER?.trim().toLowerCase();
+const aiProvider = configuredProvider === 'gemini' ? 'gemini' : 'local';
 
 export const config = {
   port: Number.isFinite(parsedPort) ? parsedPort : 3030,
-  groqApiKey: process.env.GROQ_API_KEY?.trim(),
-  groqModel: process.env.GROQ_MODEL?.trim() || 'llama-3.3-70b-versatile',
+  aiProvider,
+  geminiApiKey: process.env.GEMINI_API_KEY?.trim(),
+  geminiModel: process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash',
+  localBaseUrl: process.env.LOCAL_BASE_URL?.trim() || 'http://127.0.0.1:11434/v1',
+  localApiKey: process.env.LOCAL_API_KEY?.trim() || 'ollama',
+  localModel: process.env.LOCAL_MODEL?.trim() || 'qwen3:8b',
   frontendUrl: process.env.FRONTEND_URL?.trim() || 'http://localhost:3001',
   nodeEnv: process.env.NODE_ENV || 'development',
 };
