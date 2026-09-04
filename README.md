@@ -14,4 +14,4 @@ bun run dev:all
 
 The UI is available at `http://localhost:3001`, the AI backend at `http://localhost:3030`, and the collaboration WebSocket service uses port `8080`. Sign in, describe an app in the hero prompt, and Orin will generate it in the existing workspace.
 
-The UI stores project lists and file trees in browser storage; it does not require Convex or Inngest. Peer collaboration still expects the existing WebSocket/WebRTC service on `ws://localhost:8080`.
+The UI stores project lists and file trees in browser storage;. Peer collaboration still expects the existing WebSocket/WebRTC service on `ws://localhost:8080`.
