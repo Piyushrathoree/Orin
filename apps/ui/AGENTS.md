@@ -24,7 +24,7 @@ Scope: **`apps/ui/` only.** This file guides agents building UI for the Orin col
 | Animation | Motion (`motion/react`), GSAP + `@gsap/react` for SVG/path work |
 | Icons | Lucide React (`lucide-react`) |
 | Theming | `next-themes` — dark default, class strategy |
-| Auth | Clerk (`@clerk/nextjs`) |
+| Auth | Custom JWT (to be added) |
 | Data | tRPC + TanStack Query |
 | IDE / AI UI | CodeMirror, xterm, WebContainer, `@xyflow/react`, custom `ai-elements/` |
 | Toasts | Sonner (`@/components/ui/sonner`) |

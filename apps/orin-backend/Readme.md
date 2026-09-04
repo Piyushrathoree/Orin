@@ -2,34 +2,48 @@
 
 ## 🌟 Overview
 
-The **Orin Backend** powers the API that transforms text prompts into complete website code using Groq-hosted language models. This service processes natural language requests and returns structured project files for instant website generation.
+The **Orin Backend** transforms natural-language prompts into complete website
+code using either Gemini or a local OpenAI-compatible model.
 
 ## 💻 Tech Stack
 
 - Express.js
-- Groq API
+- Google Gemini API
+- Ollama, LM Studio, or another local OpenAI-compatible server
 - Node.js
 
 ## 📥 Installation
 
 1. **Install dependencies**
     ```bash
-    npm install
+    bun install
     ```
 
-2. **Setup environment variables**
-    Create a `.env` file:
+2. **Choose a provider in `.env`**
+
+    Local Ollama is the default:
+
+    ```env
+    AI_PROVIDER=local
+    LOCAL_BASE_URL=http://127.0.0.1:11434/v1
+    LOCAL_API_KEY=ollama
+    LOCAL_MODEL=qwen3:8b
     ```
-    GROQ_API_KEY=your-groq-api-key
-    GROQ_MODEL=llama-3.3-70b-versatile
-    PORT=3030
-    FRONTEND_URL=http://localhost:3001
+
+    For Gemini:
+
+    ```env
+    AI_PROVIDER=gemini
+    GEMINI_API_KEY=your-gemini-api-key
+    GEMINI_MODEL=gemini-2.5-flash
     ```
+
+    For local models, `LOCAL_BASE_URL` can point to LM Studio or llama.cpp if
+    they expose an OpenAI-compatible `/v1/chat/completions` endpoint.
 
 3. **Run the server**
     ```bash
-    npm run dev
+    bun run dev
     ```
 
-The API exposes `GET /health`, `POST /template`, and `POST /chat`. It runs as
-a standalone Express service backed directly by Groq.
+The API exposes `GET /health`, `POST /template`, and `POST /chat`.
