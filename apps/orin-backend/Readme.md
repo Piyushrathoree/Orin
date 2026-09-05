@@ -3,7 +3,7 @@
 ## 🌟 Overview
 
 The **Orin Backend** transforms natural-language prompts into complete website
-code using either Gemini or a local OpenAI-compatible model.
+code using Gemini, OpenRouter, or a local OpenAI-compatible model.
 
 ## 💻 Tech Stack
 
@@ -36,6 +36,14 @@ code using either Gemini or a local OpenAI-compatible model.
     AI_PROVIDER=gemini
     GEMINI_API_KEY=your-gemini-api-key
     GEMINI_MODEL=gemini-2.5-flash
+    ```
+
+    For OpenRouter:
+
+    ```env
+    AI_PROVIDER=openrouter
+    OPENROUTER_API_KEY=your-openrouter-api-key
+    OPENROUTER_MODEL=your-provider/model-name
     ```
 
     For local models, `LOCAL_BASE_URL` can point to LM Studio or llama.cpp if

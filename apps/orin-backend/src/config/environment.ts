@@ -2,13 +2,17 @@ import { DEFAULT_JWT_SECRET } from "@orin/auth";
 
 const parsedPort = Number.parseInt(process.env.PORT ?? '3030', 10);
 const configuredProvider = process.env.AI_PROVIDER?.trim().toLowerCase();
-const aiProvider = configuredProvider === 'gemini' ? 'gemini' : 'local';
+const aiProvider = configuredProvider === 'gemini' || configuredProvider === 'openrouter'
+  ? configuredProvider
+  : 'local';
 
 export const config = {
   port: Number.isFinite(parsedPort) ? parsedPort : 3030,
   aiProvider,
   geminiApiKey: process.env.GEMINI_API_KEY?.trim(),
   geminiModel: process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash',
+  openrouterApiKey: process.env.OPENROUTER_API_KEY?.trim(),
+  openrouterModel: process.env.OPENROUTER_MODEL?.trim(),
   localBaseUrl: process.env.LOCAL_BASE_URL?.trim() || 'http://127.0.0.1:11434/v1',
   localApiKey: process.env.LOCAL_API_KEY?.trim() || 'ollama',
   localModel: process.env.LOCAL_MODEL?.trim() || 'qwen3:8b',

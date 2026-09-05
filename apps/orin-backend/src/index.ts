@@ -18,6 +18,8 @@ app.get('/', (_req, res) => {
 app.get('/health', (_req, res) => {
   const aiConfigured = config.aiProvider === 'gemini'
     ? Boolean(config.geminiApiKey)
+    : config.aiProvider === 'openrouter'
+      ? Boolean(config.openrouterApiKey && config.openrouterModel)
     : Boolean(config.localBaseUrl && config.localModel);
 
   res.json({

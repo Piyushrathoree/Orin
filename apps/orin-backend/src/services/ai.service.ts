@@ -105,6 +105,45 @@ async function callGemini(messages: AIMessage[], maxTokens: number): Promise<str
   return content;
 }
 
+async function callOpenRouter(messages: AIMessage[], maxTokens: number): Promise<string> {
+  validateMessages(messages);
+
+  if (!config.openrouterApiKey || !config.openrouterModel) {
+    throw new Error('OPENROUTER_API_KEY and OPENROUTER_MODEL are required.');
+  }
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.openrouterApiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': config.frontendUrl,
+      'X-Title': 'Orin',
+    },
+    body: JSON.stringify({
+      model: config.openrouterModel,
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.2,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  const payload = await readJson<OpenAICompatibleResponse>(response);
+  if (!response.ok) {
+    throw new Error(
+      payload.error?.message || `OpenRouter request failed with status ${response.status}.`,
+    );
+  }
+
+  const content = payload.choices?.[0]?.message?.content?.trim();
+  if (!content) {
+    throw new Error('OpenRouter returned an empty response.');
+  }
+
+  return content;
+}
+
 async function callLocal(messages: AIMessage[], maxTokens: number): Promise<string> {
   validateMessages(messages);
 
@@ -142,7 +181,7 @@ async function callLocal(messages: AIMessage[], maxTokens: number): Promise<stri
 }
 
 export function callAI(messages: AIMessage[], maxTokens: number): Promise<string> {
-  return config.aiProvider === 'gemini'
-    ? callGemini(messages, maxTokens)
-    : callLocal(messages, maxTokens);
+  if (config.aiProvider === 'gemini') return callGemini(messages, maxTokens);
+  if (config.aiProvider === 'openrouter') return callOpenRouter(messages, maxTokens);
+  return callLocal(messages, maxTokens);
 }

@@ -11,6 +11,9 @@ coverage
 *.lcov
 .agents/*
 .claude/*
+
+
+*.js
 # logs
 logs
 _.log
