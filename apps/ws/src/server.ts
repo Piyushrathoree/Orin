@@ -20,6 +20,8 @@ type RoomState = {
 
 const requestedPort = Number.parseInt(process.env.PORT ?? "8080", 10);
 const port = Number.isFinite(requestedPort) ? requestedPort : 8080;
+const backendUrl =
+  process.env.BACKEND_URL?.trim().replace(/\/$/, "") || "http://localhost:3030";
 const wss = new WebSocketServer({
   port,
   maxPayload:
@@ -254,6 +256,21 @@ function joinRoom(ws: WebSocket, roomId: string) {
   }
 }
 
+async function canJoinRoom(roomId: string, token: string) {
+  try {
+    const response = await fetch(
+      `${backendUrl}/projects/${encodeURIComponent(roomId)}`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 wss.on("connection", (ws: WebSocket, request) => {
   void (async () => {
     const token = cookieValue(request.headers.cookie, AUTH_COOKIE_NAME);
@@ -274,7 +291,14 @@ wss.on("connection", (ws: WebSocket, request) => {
       if (!message) return;
 
       if (message.type === "join") {
-        joinRoom(ws, message.roomId);
+        void canJoinRoom(message.roomId, token).then((allowed) => {
+          if (!allowed) {
+            send(ws, { type: "toast", message: "You do not have access to this project" });
+            ws.close(1008, "Project access denied");
+            return;
+          }
+          joinRoom(ws, message.roomId);
+        });
         return;
       }
 
