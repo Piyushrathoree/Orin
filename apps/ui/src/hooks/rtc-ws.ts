@@ -155,14 +155,9 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
   };
 
   useEffect(() => {
-    ws.current = new WebSocket(
-      process.env.NEXT_PUBLIC_WS_URL?.trim() || "ws://localhost:8080",
-    );
-    ws.current.onopen = () => {
-      joinedRoomRef.current = false;
-      if (roomId && ws.current?.readyState === WebSocket.OPEN)
-        ws.current?.send(JSON.stringify({ type: "join", roomId }));
-    };
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempts = 0;
 
     pc.current = new RTCPeerConnection({
       iceServers: [
@@ -217,7 +212,21 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
       };
     };
 
-    ws.current.onmessage = async (message) => {
+    const connectSocket = () => {
+      if (disposed) return;
+
+      ws.current = new WebSocket(
+        process.env.NEXT_PUBLIC_WS_URL?.trim() || "ws://localhost:8080",
+      );
+      ws.current.onopen = () => {
+        reconnectAttempts = 0;
+        joinedRoomRef.current = false;
+        if (roomId && ws.current?.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({ type: "join", roomId }));
+        }
+      };
+
+      ws.current.onmessage = async (message) => {
       let data: {
         type?: string;
         payload?: string;
@@ -330,12 +339,22 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
       if (data.type === "user-count") {
         if (typeof data.count === "number") setTotalUserCount(data.count);
       }
-    };
-    ws.current.onclose = () => {
-      joinedRoomRef.current = false;
+      };
+      ws.current.onclose = (event) => {
+        joinedRoomRef.current = false;
+        if (disposed || event.code === 1008) return;
+
+        const delay = Math.min(5000, 500 * 2 ** reconnectAttempts);
+        reconnectAttempts += 1;
+        reconnectTimer = setTimeout(connectSocket, delay);
+      };
     };
 
+    connectSocket();
+
     return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (localStreams.current) {
         localStreams.current.getTracks().forEach((track) => track.stop());
       }

@@ -87,10 +87,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="outline" asChild>
-          <a href="/api/auth/google">Google</a>
+          <Link href="/api/auth/google">Google</Link>
         </Button>
         <Button variant="outline" asChild>
-          <a href="/api/auth/github">GitHub</a>
+          <Link href="/api/auth/github">GitHub</Link>
         </Button>
       </div>
 

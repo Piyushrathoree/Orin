@@ -7,7 +7,15 @@ interface IDEStore {
   fileStructure: FileSystemTree;
   setFileStructure: (
     updater: FileSystemTree | ((prev: FileSystemTree) => FileSystemTree),
+    options?: { recordHistory?: boolean },
   ) => void;
+  past: FileSystemTree[];
+  future: FileSystemTree[];
+  undo: () => boolean;
+  redo: () => boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  clearHistory: () => void;
   editorRef: React.MutableRefObject<HTMLDivElement | null>;
   setEditorRef: (ref: React.MutableRefObject<HTMLDivElement | null>) => void;
   editorView: EditorView | null;
@@ -34,16 +42,68 @@ interface IDEStore {
   setPreviewDevice: (device: "desktop" | "tablet" | "mobile") => void;
 }
 
+const MAX_HISTORY_ENTRIES = 100;
+
 const createIDEStore = () =>
   create<IDEStore>((set) => ({
     fileStructure: createProjectFiles(),
-    setFileStructure: (updater) =>
-      set((state) => ({
-        fileStructure:
+    setFileStructure: (updater, options = {}) =>
+      set((state) => {
+        const fileStructure =
           typeof updater === "function"
             ? updater(state.fileStructure)
-            : updater,
-      })),
+            : updater;
+        if (fileStructure === state.fileStructure) return state;
+
+        if (options.recordHistory === false) {
+          return { fileStructure };
+        }
+
+        return {
+          fileStructure,
+          past: [...state.past, state.fileStructure].slice(-MAX_HISTORY_ENTRIES),
+          future: [],
+          canUndo: true,
+          canRedo: false,
+        };
+      }),
+    past: [],
+    future: [],
+    canUndo: false,
+    canRedo: false,
+    undo: () => {
+      let changed = false;
+      set((state) => {
+        const previous = state.past.at(-1);
+        if (!previous) return state;
+        changed = true;
+        return {
+          fileStructure: previous,
+          past: state.past.slice(0, -1),
+          future: [state.fileStructure, ...state.future].slice(0, MAX_HISTORY_ENTRIES),
+          canUndo: state.past.length > 1,
+          canRedo: true,
+        };
+      });
+      return changed;
+    },
+    redo: () => {
+      let changed = false;
+      set((state) => {
+        const next = state.future[0];
+        if (!next) return state;
+        changed = true;
+        return {
+          fileStructure: next,
+          past: [...state.past, state.fileStructure].slice(-MAX_HISTORY_ENTRIES),
+          future: state.future.slice(1),
+          canUndo: true,
+          canRedo: state.future.length > 1,
+        };
+      });
+      return changed;
+    },
+    clearHistory: () => set({ past: [], future: [], canUndo: false, canRedo: false }),
     editorRef: { current: null },
     setEditorRef: (ref) => set({ editorRef: ref }),
     editorView: null,

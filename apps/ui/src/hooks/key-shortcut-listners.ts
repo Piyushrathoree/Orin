@@ -1,13 +1,16 @@
 import { useIDEStore } from "@/stores/ideStore";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 export const useKeyShortcutListeners = ({
   handleSaveCurrentFile,
+  handleUndo,
+  handleRedo,
   handleCloseTab,
   currentTabId,
 }: {
   handleSaveCurrentFile: () => void;
+  handleUndo: () => void;
+  handleRedo: () => void;
   handleCloseTab: (tabId: string) => void;
   currentTabId: string | null;
 }) => {
@@ -16,7 +19,7 @@ export const useKeyShortcutListeners = ({
   const [showSearch, setShowSearch] = useState(false);
   const [showAiChat, setShowAiChat] = useState(true);
   const [showTerminal, setShowTerminal] = useState(true);
-  const { setActiveTab, activeTab } = useIDEStore();
+  const { setActiveTab } = useIDEStore();
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -71,6 +74,17 @@ export const useKeyShortcutListeners = ({
         handleSaveCurrentFile();
       }
 
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) handleRedo();
+        else handleUndo();
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        handleRedo();
+      }
+
       // Ctrl/Cmd + W - Close Tab
       if ((e.ctrlKey || e.metaKey) && e.key === "w") {
         e.preventDefault();
@@ -82,7 +96,16 @@ export const useKeyShortcutListeners = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentTabId, showExplorer, showSearch]);
+  }, [
+    currentTabId,
+    handleCloseTab,
+    handleRedo,
+    handleSaveCurrentFile,
+    handleUndo,
+    setActiveTab,
+    showExplorer,
+    showSearch,
+  ]);
 
   return {
     setShowTerminal,

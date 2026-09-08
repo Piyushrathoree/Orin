@@ -104,6 +104,10 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
     isContainerBooted,
     setIsLoading,
     setLoadingMessage,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useIDEStore();
 
   const {
@@ -137,6 +141,51 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
     setCurrentTabId,
   });
 
+  const syncHistoryToTabs = useCallback(
+    (changed: boolean) => {
+      if (!changed) return;
+
+      const snapshot = fileTreeToCodeSnapshot(useIDEStore.getState().fileStructure);
+      const contentByPath = new Map(
+        snapshot.files.map((file) => [file.path, file.content]),
+      );
+      const nextTabs = openTabs.flatMap((tab) => {
+        const content = contentByPath.get(tab.path);
+        return content === undefined
+          ? []
+          : [{ ...tab, content, isDirty: true }];
+      });
+      setOpenTabs(nextTabs);
+
+      if (currentTabId && !nextTabs.some((tab) => tab.id === currentTabId)) {
+        setCurrentTabId(nextTabs[0]?.id ?? null);
+        setSelectedFile(nextTabs[0]?.path ?? null);
+      }
+
+      sendCodeSnapshot(snapshot);
+      refreshPreview();
+    },
+    [
+      currentTabId,
+      openTabs,
+      refreshPreview,
+      sendCodeSnapshot,
+      setCurrentTabId,
+      setOpenTabs,
+      setSelectedFile,
+    ],
+  );
+
+  const undoAndSync = useCallback(
+    () => syncHistoryToTabs(undo()),
+    [syncHistoryToTabs, undo],
+  );
+
+  const redoAndSync = useCallback(
+    () => syncHistoryToTabs(redo()),
+    [redo, syncHistoryToTabs],
+  );
+
   const {
     showExplorer,
     setShowExplorer,
@@ -148,6 +197,8 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
     setShowAiChat,
   } = useKeyShortcutListeners({
     handleSaveCurrentFile,
+    handleUndo: () => undoAndSync(),
+    handleRedo: () => redoAndSync(),
     handleCloseTab,
     currentTabId,
   });
@@ -217,8 +268,9 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
         }
       }
 
-      setFileStructure((previous: FileSystemTree) =>
-        applyOrinActions(previous, actions),
+      setFileStructure(
+        (previous: FileSystemTree) => applyOrinActions(previous, actions),
+        { recordHistory: false },
       );
 
       const actionsByPath = new Map(
@@ -725,6 +777,10 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
                 showTerminal={showTerminal}
                 setShowTerminal={setShowTerminal}
                 handleSaveCurrentFile={handleSaveCurrentFile}
+                onUndo={undoAndSync}
+                onRedo={redoAndSync}
+                canUndo={canUndo}
+                canRedo={canRedo}
                 liveUrl={liveUrl}
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}

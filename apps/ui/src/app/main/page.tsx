@@ -50,7 +50,7 @@ import { toast } from "sonner";
 type LocalProject = {
   id: string;
   name: string;
-  createdAt: number;
+  createdAt: string | number;
 };
 
 const PROJECTS_STORAGE_KEY = "orin:projects";
@@ -86,30 +86,64 @@ function saveProjects(projects: LocalProject[]) {
   window.localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
 }
 
-function createProjectId() {
-  return globalThis.crypto?.randomUUID?.() || `project-${Date.now()}`;
-}
-
-function persistNewProject(name: string, existing: LocalProject[]): LocalProject | null {
-  if (existing.length >= 5) return null;
-
-  const project: LocalProject = {
-    id: createProjectId(),
-    name: name.trim() || DEFAULT_PROJECT_NAME,
-    createdAt: Date.now(),
-  };
+function saveLocalProject(project: LocalProject, tree: ReturnType<typeof createProjectFiles>) {
+  const existing = readProjects().filter((item) => item.id !== project.id);
   saveProjects([project, ...existing].slice(0, 5));
-  const folderName = sanitizeProjectName(project.name);
   window.localStorage.setItem(
     TEMPLATE_VERSION_STORAGE_KEY,
     String(PROJECT_TEMPLATE_VERSION),
   );
   window.localStorage.setItem(
     getProjectStorageKey(project.id),
-    JSON.stringify(createProjectFiles(folderName)),
+    JSON.stringify(tree),
   );
   window.localStorage.removeItem(getLegacyProjectStorageKey(project.id));
   window.localStorage.removeItem(getPreviousProjectStorageKey(project.id));
+}
+
+function readRemoteProject(value: unknown): LocalProject | null {
+  if (!value || typeof value !== "object") return null;
+  const project = value as { id?: unknown; name?: unknown; createdAt?: unknown };
+  if (
+    typeof project.id !== "string" ||
+    typeof project.name !== "string" ||
+    (typeof project.createdAt !== "string" && typeof project.createdAt !== "number")
+  ) {
+    return null;
+  }
+  return {
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+  };
+}
+
+async function loadRemoteProjects() {
+  const response = await fetch("/api/orin/projects", { cache: "no-store" });
+  if (!response.ok) throw new Error("Could not load projects");
+  const payload = (await response.json()) as { projects?: unknown };
+  return Array.isArray(payload.projects)
+    ? payload.projects.flatMap((project) => {
+        const parsed = readRemoteProject(project);
+        return parsed ? [parsed] : [];
+      })
+    : [];
+}
+
+async function createRemoteProject(name: string) {
+  const trimmedName = name.trim() || DEFAULT_PROJECT_NAME;
+  const tree = createProjectFiles(sanitizeProjectName(trimmedName));
+  const response = await fetch("/api/orin/projects", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: trimmedName, tree }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as { project?: unknown; error?: string };
+  if (!response.ok) throw new Error(payload.error || "Could not create project");
+
+  const project = readRemoteProject(payload.project);
+  if (!project) throw new Error("Project service returned an invalid project");
+  saveLocalProject(project, tree);
   return project;
 }
 
@@ -133,8 +167,9 @@ const Page = () => {
 
   useEffect(() => {
     // Read browser storage after hydration so the server and client render match.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setProjects(readProjects());
+    void loadRemoteProjects()
+      .then((remoteProjects) => setProjects(remoteProjects.length > 0 ? remoteProjects : readProjects()))
+      .catch(() => setProjects(readProjects()));
   }, []);
 
   useEffect(() => {
@@ -155,22 +190,23 @@ const Page = () => {
     }
 
     const name = projectNameFromPrompt(prompt);
-    const project = persistNewProject(name, existing);
-    if (!project) {
-      savePendingPrompt(prompt);
-      releasePromptCreateLock();
-      return;
-    }
-
-    saveProjectPrompt(project.id, prompt);
-    releasePromptCreateLock();
-    window.location.assign(`/room/${project.id}`);
+    void createRemoteProject(name)
+      .then((project) => {
+        saveProjectPrompt(project.id, prompt);
+        releasePromptCreateLock();
+        window.location.assign(`/room/${project.id}`);
+      })
+      .catch((error: unknown) => {
+        savePendingPrompt(prompt);
+        releasePromptCreateLock();
+        toast.error(error instanceof Error ? error.message : "Could not create project");
+      });
   }, []);
 
   const projectCount = projects.length;
   const isAtProjectLimit = projectCount >= 5;
 
-  const formatCreationTime = (timestampMs: number) =>
+  const formatCreationTime = (timestampMs: string | number) =>
     new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "2-digit",
@@ -179,55 +215,67 @@ const Page = () => {
       minute: "2-digit",
     }).format(new Date(timestampMs));
 
-  const handleEnterRoom = (event: React.FormEvent) => {
+  const handleEnterRoom = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!projectName.trim() || isCreating || isAtProjectLimit) return;
 
     setIsCreating(true);
-    const project = persistNewProject(projectName.trim(), projects);
-    if (!project) {
+    try {
+      const project = await createRemoteProject(projectName.trim());
+      setProjects((previous) => [project, ...previous].slice(0, 5));
+      setIsDialogOpen(false);
+      setProjectName(DEFAULT_PROJECT_NAME);
+      window.location.assign(`/room/${project.id}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create project");
+    } finally {
       setIsCreating(false);
-      return;
     }
-    setProjects(readProjects());
-    setIsDialogOpen(false);
-    setProjectName(DEFAULT_PROJECT_NAME);
-    window.location.assign(`/room/${project.id}`);
   };
 
-  const handleCreateWithPrompt = (event: React.FormEvent) => {
+  const handleCreateWithPrompt = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = promptText.trim();
     if (!trimmed || isCreating || isAtProjectLimit) return;
 
     setIsCreating(true);
-    const project = persistNewProject(projectNameFromPrompt(trimmed), projects);
-    if (!project) {
+    try {
+      const project = await createRemoteProject(projectNameFromPrompt(trimmed));
+      saveProjectPrompt(project.id, trimmed);
+      setProjects((previous) => [project, ...previous].slice(0, 5));
+      setIsPromptDialogOpen(false);
+      setPromptText("");
+      window.location.assign(`/room/${project.id}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create project");
+    } finally {
       setIsCreating(false);
-      toast.error(
-        "You reached the 5 project limit. Delete a project to generate a new one.",
-      );
-      return;
     }
-
-    saveProjectPrompt(project.id, trimmed);
-    setProjects(readProjects());
-    setIsPromptDialogOpen(false);
-    setPromptText("");
-    window.location.assign(`/room/${project.id}`);
   };
 
-  const handleDeleteProject = (projectId: string) => {
+  const handleDeleteProject = async (projectId: string) => {
     if (deletingProjectId) return;
 
     setDeletingProjectId(projectId);
-    const nextProjects = projects.filter((project) => project.id !== projectId);
-    saveProjects(nextProjects);
-    window.localStorage.removeItem(getProjectStorageKey(projectId));
-    window.localStorage.removeItem(getPreviousProjectStorageKey(projectId));
-    window.localStorage.removeItem(getLegacyProjectStorageKey(projectId));
-    setProjects(nextProjects);
-    setDeletingProjectId(null);
+    try {
+      const response = await fetch(`/api/orin/projects/${encodeURIComponent(projectId)}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || "Could not delete project");
+      }
+      const nextProjects = projects.filter((project) => project.id !== projectId);
+      saveProjects(nextProjects);
+      window.localStorage.removeItem(getProjectStorageKey(projectId));
+      window.localStorage.removeItem(getPreviousProjectStorageKey(projectId));
+      window.localStorage.removeItem(getLegacyProjectStorageKey(projectId));
+      setProjects(nextProjects);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete project");
+    } finally {
+      setDeletingProjectId(null);
+    }
   };
 
   const handleLogout = async () => {

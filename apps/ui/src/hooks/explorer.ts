@@ -55,6 +55,11 @@ function writeProjectTree(key: string, tree: FileSystemTree) {
   }
 }
 
+function readRemoteTree(value: unknown): FileSystemTree | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as FileSystemTree;
+}
+
 function normalizePath(path: string) {
   return path.replace(/^\/+|\/+$/g, "");
 }
@@ -151,6 +156,7 @@ export const useExplorer = ({
   const {
     fileStructure,
     setFileStructure,
+    clearHistory,
     setActiveTab,
     refreshPreview,
   } = useIDEStore();
@@ -162,43 +168,85 @@ export const useExplorer = ({
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
   useEffect(() => {
-    const currentTree = readProjectTree(projectKey);
-    const previousKey = getPreviousProjectStorageKey(projectId);
-    const previousTree = currentTree ? null : readProjectTree(previousKey);
-    const legacyKey = getLegacyProjectStorageKey(projectId);
-    const legacyTree =
-      currentTree || previousTree ? null : readProjectTree(legacyKey);
-    const savedTree = currentTree ?? previousTree ?? legacyTree;
-    // Hydrate the shared editor store from browser storage after mounting.
-    /* eslint-disable react-hooks/set-state-in-effect */
-    const tree = resolveProjectTree(
-      savedTree,
-      readFolderNameForProject(projectId),
-    );
-    setFileStructure(tree);
-    setExpandedFolders(getDefaultExpandedFolders(tree));
-    setOpenTabs([]);
-    setCurrentTabId(null);
-    setSelectedFile(null);
-    setStorageLoaded(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
+    let cancelled = false;
 
-    try {
-      window.localStorage.setItem(
-        TEMPLATE_VERSION_STORAGE_KEY,
-        String(PROJECT_TEMPLATE_VERSION),
-      );
-      window.localStorage.removeItem(legacyKey);
-      window.localStorage.removeItem(previousKey);
-      writeProjectTree(projectKey, tree);
-    } catch {
-      // Persistence is best-effort; the in-memory Vite tree still boots.
-    }
-  }, [projectId, projectKey, setCurrentTabId, setFileStructure, setOpenTabs]);
+    const loadProject = async () => {
+      const currentTree = readProjectTree(projectKey);
+      const previousKey = getPreviousProjectStorageKey(projectId);
+      const previousTree = currentTree ? null : readProjectTree(previousKey);
+      const legacyKey = getLegacyProjectStorageKey(projectId);
+      const legacyTree =
+        currentTree || previousTree ? null : readProjectTree(legacyKey);
+      const savedTree = currentTree ?? previousTree ?? legacyTree;
+      let tree = resolveProjectTree(savedTree, readFolderNameForProject(projectId));
+
+      if (projectId) {
+        try {
+          const response = await fetch(
+            `/api/orin/projects/${encodeURIComponent(projectId)}`,
+            { cache: "no-store" },
+          );
+          if (response.ok) {
+            const payload = (await response.json()) as {
+              project?: { tree?: unknown };
+            };
+            const remoteTree = readRemoteTree(payload.project?.tree);
+            if (remoteTree) tree = resolveProjectTree(remoteTree, readFolderNameForProject(projectId));
+          }
+        } catch (error) {
+          console.warn("[Orin UI] Could not load project files:", error);
+        }
+      }
+
+      if (cancelled) return;
+
+      // Hydrate the shared editor store from persisted project data after mounting.
+      setFileStructure(tree, { recordHistory: false });
+      clearHistory();
+      setExpandedFolders(getDefaultExpandedFolders(tree));
+      setOpenTabs([]);
+      setCurrentTabId(null);
+      setSelectedFile(null);
+      setStorageLoaded(true);
+
+      try {
+        window.localStorage.setItem(
+          TEMPLATE_VERSION_STORAGE_KEY,
+          String(PROJECT_TEMPLATE_VERSION),
+        );
+        window.localStorage.removeItem(legacyKey);
+        window.localStorage.removeItem(previousKey);
+        writeProjectTree(projectKey, tree);
+      } catch {
+        // The backend remains the source of truth when browser storage is unavailable.
+      }
+    };
+
+    void loadProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [clearHistory, projectId, projectKey, setCurrentTabId, setFileStructure, setOpenTabs]);
 
   useEffect(() => {
     if (storageLoaded) writeProjectTree(projectKey, fileStructure);
   }, [fileStructure, projectKey, storageLoaded]);
+
+  useEffect(() => {
+    if (!storageLoaded || !projectId) return;
+
+    const timer = window.setTimeout(() => {
+      void fetch(`/api/orin/projects/${encodeURIComponent(projectId)}/files`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tree: fileStructure }),
+      }).catch((error: unknown) => {
+        console.warn("[Orin UI] Could not save project files:", error);
+      });
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [fileStructure, projectId, storageLoaded]);
 
   const toggleFolder = useCallback((folderName: string) => {
     setExpandedFolders((previous) => {

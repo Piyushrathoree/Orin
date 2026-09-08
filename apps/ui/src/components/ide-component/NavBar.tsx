@@ -5,7 +5,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { X, Eye, Code, Monitor, Tablet, Smartphone } from "lucide-react";
+import { X, Eye, Code, Monitor, Tablet, Smartphone, Undo2, Redo2 } from "lucide-react";
 import { motion } from "motion/react";
 import ExportGithubDialog from "./export-github";
 import { FileIconCustom } from "./file-icon";
@@ -25,6 +25,10 @@ interface NavBarProps {
   showTerminal: boolean;
   setShowTerminal: (v: boolean | ((prev: boolean) => boolean)) => void;
   handleSaveCurrentFile: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
   liveUrl: string | null;
   activeTab?: "code" | "preview";
   setActiveTab?: (tab: "code" | "preview") => void;
@@ -39,6 +43,10 @@ const NavBar: React.FC<NavBarProps> = ({
   currentTabId,
   setCurrentTabId,
   handleCloseTab,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   activeTab = "code",
   setActiveTab = () => {},
   previewDevice = "desktop",
@@ -96,6 +104,38 @@ const NavBar: React.FC<NavBarProps> = ({
         })}
       </div>
       <div className="ml-2 flex h-full items-center gap-1.5">
+        <div className="flex h-7 items-center rounded-md bg-muted p-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                onClick={onUndo}
+                disabled={!canUndo}
+                aria-label="Undo"
+              >
+                <Undo2 className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Undo (Ctrl/Cmd+Z)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                onClick={onRedo}
+                disabled={!canRedo}
+                aria-label="Redo"
+              >
+                <Redo2 className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Redo (Ctrl/Cmd+Shift+Z)</TooltipContent>
+          </Tooltip>
+        </div>
         <div className="flex h-7 items-center rounded-md bg-muted p-0.5">
           <Button
             variant="ghost"
