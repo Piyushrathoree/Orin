@@ -13,13 +13,40 @@ datasource db {
 }
 
 model User {
-  id             String         @id @default(uuid())
-  email          String         @unique
-  passwordHash   String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  projects       Project[]
-  oauthAccounts  OAuthAccount[]
+  id              String            @id @default(uuid())
+  email           String            @unique
+  passwordHash    String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  projects        Project[]
+  oauthAccounts   OAuthAccount[]
+  providerKeys    UserProviderKey[]
+  defaultProvider AiProvider?
+}
+
+enum AiProvider {
+  OPENAI
+  ANTHROPIC
+  GEMINI
+  GROQ
+  OPENROUTER
+  LOCAL
+}
+
+model UserProviderKey {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     AiProvider
+  encryptedKey String?
+  keyHint      String?
+  baseUrl      String?
+  model        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
 }
 
 model OAuthAccount {

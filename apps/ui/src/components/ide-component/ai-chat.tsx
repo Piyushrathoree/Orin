@@ -55,6 +55,8 @@ type PendingActions = {
   messageId: string;
 };
 
+const NO_PROVIDER_ERROR = "Add an API key in Settings to start chatting";
+
 function actionSummary(actions: OrinAction[]) {
   const createdOrUpdated = actions.filter((action) => action.type === "file").length;
   const deleted = actions.filter((action) => action.type === "delete").length;
@@ -211,7 +213,13 @@ const AiChat: React.FC<AiChatProps> = ({
           : new Error("The assistant could not complete the request.");
       setError(nextError);
       setStatus("error");
-      toast.error(nextError.message);
+      if (nextError.message === NO_PROVIDER_ERROR) {
+        toast.error(nextError.message, {
+          action: { label: "Open Settings", onClick: () => window.location.assign("/main/settings") },
+        });
+      } else {
+        toast.error(nextError.message);
+      }
     }
   };
 

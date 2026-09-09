@@ -21,6 +21,7 @@ export const config = {
   jwtSecret:
     process.env.JWT_SECRET?.trim() ||
     DEFAULT_JWT_SECRET,
+  secretsEncryptionKey: process.env.SECRETS_ENCRYPTION_KEY?.trim(),
   googleClientId: process.env.GOOGLE_CLIENT_ID?.trim(),
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim(),
   githubClientId: process.env.GITHUB_CLIENT_ID?.trim(),

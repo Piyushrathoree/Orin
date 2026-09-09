@@ -55,6 +55,7 @@ interface IDEComponentProps {
 }
 
 const startedProjectGenerations = new Set<string>();
+const NO_PROVIDER_ERROR = "Add an API key in Settings to start chatting";
 
 function normalizeSharedCodeFiles(files: CodeFile[]): CodeFile[] {
   const normalized = new Map<string, string>();
@@ -607,7 +608,13 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
         const message =
           error instanceof Error ? error.message : "App generation failed";
         console.error("[IDE] Initial generate failed:", error);
-        toast.error(message);
+        if (message === NO_PROVIDER_ERROR) {
+          toast.error(message, {
+            action: { label: "Open Settings", onClick: () => window.location.assign("/main/settings") },
+          });
+        } else {
+          toast.error(message);
+        }
       } finally {
         setIsLoading(false);
       }

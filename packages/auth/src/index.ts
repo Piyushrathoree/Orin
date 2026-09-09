@@ -5,7 +5,7 @@ import {
   AUTH_COOKIE_NAME,
   AUTH_TOKEN_TTL_SECONDS,
   DEFAULT_JWT_SECRET,
-} from "./constants.js";
+} from "./constants";
 
 const scrypt = promisify(scryptCallback);
 const TOKEN_ISSUER = "orin";

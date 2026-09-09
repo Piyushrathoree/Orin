@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { callAI } from '../services/ai.service';
+import { NoProviderConfiguredError, resolveUserProvider } from '../services/provider-resolver.service';
 import { getSystemPrompt } from '../prompts';
 import { config } from '../config/environment';
 import { AIMessage, ChatResponse, ErrorResponse } from '../types';
@@ -46,7 +47,8 @@ router.post('/', async (req, res) => {
       ...messages,
     ];
 
-    const output = await callAI(providerMessages, MAX_COMPLETION_TOKENS);
+    const resolved = await resolveUserProvider(req.user!.id);
+    const output = await callAI(resolved, providerMessages, MAX_COMPLETION_TOKENS);
 
     const response: ChatResponse = {
       response: output,
@@ -54,6 +56,12 @@ router.post('/', async (req, res) => {
 
     res.json(response);
   } catch (error) {
+    if (error instanceof NoProviderConfiguredError) {
+      const errorResponse: ErrorResponse = { error: 'Add an API key in Settings to start chatting' };
+      res.status(400).json(errorResponse);
+      return;
+    }
+
     console.error('[Orin API] Chat request failed:', error);
     const errorResponse: ErrorResponse = {
       error:

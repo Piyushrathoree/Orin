@@ -4,7 +4,9 @@ import { AUTH_COOKIE_NAME } from "@orin/auth/constants";
 
 export function middleware(req: NextRequest) {
   const protectedPath =
-    req.nextUrl.pathname === "/main" || req.nextUrl.pathname.startsWith("/room");
+    req.nextUrl.pathname === "/main" ||
+    req.nextUrl.pathname.startsWith("/main/") ||
+    req.nextUrl.pathname.startsWith("/room");
   if (protectedPath && !req.cookies.has(AUTH_COOKIE_NAME)) {
     const signInUrl = req.nextUrl.clone();
     signInUrl.pathname = "/sign-in";

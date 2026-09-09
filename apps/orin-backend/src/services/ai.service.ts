@@ -1,5 +1,13 @@
+import { AiProvider } from '@orin/db';
 import { config } from '../config/environment';
 import { AIMessage } from '../types';
+
+export type ResolvedProvider = {
+  provider: AiProvider;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+};
 
 type GeminiResponse = {
   candidates?: Array<{
@@ -27,6 +35,13 @@ type OpenAICompatibleResponse = {
   };
 };
 
+type AnthropicResponse = {
+  content?: Array<{ type: string; text?: string }>;
+  error?: {
+    message?: string;
+  };
+};
+
 function validateMessages(messages: AIMessage[]) {
   if (messages.length === 0) {
     throw new Error('At least one message is required.');
@@ -43,13 +58,18 @@ async function readJson<T>(response: Response): Promise<T> {
   }
 }
 
-async function callGemini(messages: AIMessage[], maxTokens: number): Promise<string> {
+async function callGemini(
+  { apiKey, model }: { apiKey?: string; model?: string },
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
   validateMessages(messages);
 
-  if (!config.geminiApiKey) {
-    throw new Error('GEMINI_API_KEY is not configured.');
+  if (!apiKey) {
+    throw new Error('A Gemini API key is required.');
   }
 
+  const resolvedModel = model || 'gemini-2.5-flash';
   const systemMessage = messages.find((message) => message.role === 'system')?.content;
   const contents = messages
     .filter((message) => message.role !== 'system')
@@ -59,12 +79,12 @@ async function callGemini(messages: AIMessage[], maxTokens: number): Promise<str
     }));
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(config.geminiModel)}:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(resolvedModel)}:generateContent`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': config.geminiApiKey,
+        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
         ...(systemMessage
@@ -105,23 +125,83 @@ async function callGemini(messages: AIMessage[], maxTokens: number): Promise<str
   return content;
 }
 
-async function callOpenRouter(messages: AIMessage[], maxTokens: number): Promise<string> {
+async function callAnthropic(
+  { apiKey, model }: { apiKey?: string; model?: string },
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
   validateMessages(messages);
 
-  if (!config.openrouterApiKey || !config.openrouterModel) {
-    throw new Error('OPENROUTER_API_KEY and OPENROUTER_MODEL are required.');
+  if (!apiKey) {
+    throw new Error('An Anthropic API key is required.');
   }
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const systemMessage = messages.find((message) => message.role === 'system')?.content;
+  const anthropicMessages = messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => ({ role: message.role, content: message.content }));
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.openrouterApiKey}`,
       'Content-Type': 'application/json',
-      'HTTP-Referer': config.frontendUrl,
-      'X-Title': 'Orin',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: config.openrouterModel,
+      model: model || 'claude-opus-5',
+      max_tokens: maxTokens,
+      ...(systemMessage ? { system: systemMessage } : {}),
+      messages: anthropicMessages,
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+
+  const payload = await readJson<AnthropicResponse>(response);
+  if (!response.ok) {
+    throw new Error(
+      payload.error?.message || `Anthropic request failed with status ${response.status}.`,
+    );
+  }
+
+  const content = payload.content
+    ?.filter((block) => block.type === 'text')
+    .map((block) => block.text || '')
+    .join('')
+    .trim();
+
+  if (!content) {
+    throw new Error('Anthropic returned an empty response.');
+  }
+
+  return content;
+}
+
+async function callOpenAICompatible(
+  { baseUrl, apiKey, model, extraHeaders }: {
+    baseUrl: string;
+    apiKey?: string;
+    model?: string;
+    extraHeaders?: Record<string, string>;
+  },
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
+  validateMessages(messages);
+
+  if (!model) {
+    throw new Error('A model is required.');
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      ...extraHeaders,
+    },
+    body: JSON.stringify({
+      model,
       messages,
       max_tokens: maxTokens,
       temperature: 0.2,
@@ -132,56 +212,105 @@ async function callOpenRouter(messages: AIMessage[], maxTokens: number): Promise
   const payload = await readJson<OpenAICompatibleResponse>(response);
   if (!response.ok) {
     throw new Error(
-      payload.error?.message || `OpenRouter request failed with status ${response.status}.`,
+      payload.error?.message || `Request to ${baseUrl} failed with status ${response.status}.`,
     );
   }
 
   const content = payload.choices?.[0]?.message?.content?.trim();
   if (!content) {
-    throw new Error('OpenRouter returned an empty response.');
+    throw new Error(`${baseUrl} returned an empty response.`);
   }
 
   return content;
 }
 
-async function callLocal(messages: AIMessage[], maxTokens: number): Promise<string> {
-  validateMessages(messages);
-
-  const response = await fetch(
-    `${config.localBaseUrl.replace(/\/+$/, '')}/chat/completions`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.localApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: config.localModel,
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.2,
-      }),
-      signal: AbortSignal.timeout(120_000),
-    },
+function callOpenAI(
+  { apiKey, model }: { apiKey?: string; model?: string },
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error('An OpenAI API key is required.');
+  }
+  return callOpenAICompatible(
+    { baseUrl: 'https://api.openai.com/v1', apiKey, model: model || 'gpt-4o-mini' },
+    messages,
+    maxTokens,
   );
-
-  const payload = await readJson<OpenAICompatibleResponse>(response);
-  if (!response.ok) {
-    throw new Error(
-      payload.error?.message || `Local model request failed with status ${response.status}.`,
-    );
-  }
-
-  const content = payload.choices?.[0]?.message?.content?.trim();
-  if (!content) {
-    throw new Error('Local model returned an empty response.');
-  }
-
-  return content;
 }
 
-export function callAI(messages: AIMessage[], maxTokens: number): Promise<string> {
-  if (config.aiProvider === 'gemini') return callGemini(messages, maxTokens);
-  if (config.aiProvider === 'openrouter') return callOpenRouter(messages, maxTokens);
-  return callLocal(messages, maxTokens);
+function callGroq(
+  { apiKey, model }: { apiKey?: string; model?: string },
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
+  if (!apiKey) {
+    throw new Error('A Groq API key is required.');
+  }
+  return callOpenAICompatible(
+    { baseUrl: 'https://api.groq.com/openai/v1', apiKey, model: model || 'llama-3.3-70b-versatile' },
+    messages,
+    maxTokens,
+  );
+}
+
+function callOpenRouter(
+  { apiKey, model }: { apiKey?: string; model?: string },
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
+  if (!apiKey || !model) {
+    throw new Error('An OpenRouter API key and model are required.');
+  }
+  return callOpenAICompatible(
+    {
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey,
+      model,
+      extraHeaders: {
+        'HTTP-Referer': config.frontendUrl,
+        'X-Title': 'Orin',
+      },
+    },
+    messages,
+    maxTokens,
+  );
+}
+
+function callLocal(
+  { apiKey, baseUrl, model }: { apiKey?: string; baseUrl?: string; model?: string },
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
+  return callOpenAICompatible(
+    {
+      baseUrl: baseUrl || 'http://127.0.0.1:11434/v1',
+      apiKey: apiKey || 'ollama',
+      model: model || 'qwen3:8b',
+    },
+    messages,
+    maxTokens,
+  );
+}
+
+export function callAI(
+  resolved: ResolvedProvider,
+  messages: AIMessage[],
+  maxTokens: number,
+): Promise<string> {
+  switch (resolved.provider) {
+    case AiProvider.OPENAI:
+      return callOpenAI(resolved, messages, maxTokens);
+    case AiProvider.ANTHROPIC:
+      return callAnthropic(resolved, messages, maxTokens);
+    case AiProvider.GEMINI:
+      return callGemini(resolved, messages, maxTokens);
+    case AiProvider.GROQ:
+      return callGroq(resolved, messages, maxTokens);
+    case AiProvider.OPENROUTER:
+      return callOpenRouter(resolved, messages, maxTokens);
+    case AiProvider.LOCAL:
+    default:
+      return callLocal(resolved, messages, maxTokens);
+  }
 }

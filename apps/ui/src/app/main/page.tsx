@@ -42,7 +42,7 @@ import {
   saveProjectPrompt,
   takePendingPrompt,
 } from "@/lib/initial-prompt";
-import { ArrowUpRight, FolderDown, FolderOpen, LogOut, Trash2 } from "lucide-react";
+import { ArrowUpRight, FolderDown, FolderOpen, LogOut, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -297,6 +297,12 @@ const Page = () => {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Link href="/main/settings">
+              <Button variant="outline" size="sm">
+                <Settings className="size-3.5" />
+                Settings
+              </Button>
+            </Link>
             <Button variant="outline" size="sm" onClick={handleLogout}>
               <LogOut className="size-3.5" />
               Sign out

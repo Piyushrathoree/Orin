@@ -5,6 +5,7 @@ import templateRoutes from './routes/template';
 import chatRoutes from './routes/chat';
 import authRoutes from './routes/auth';
 import projectRoutes from './routes/projects';
+import settingsRoutes from './routes/settings';
 import { config } from './config/environment';
 import { requireAuth } from './middleware/require-auth';
 
@@ -36,6 +37,7 @@ app.use('/auth', authRoutes);
 app.use('/projects', requireAuth, projectRoutes);
 app.use('/template', requireAuth, templateRoutes);
 app.use('/chat', requireAuth, chatRoutes);
+app.use('/settings', requireAuth, settingsRoutes);
 
 app.listen(config.port, () => {
   console.log(`Orin API running on http://localhost:${config.port}`);
