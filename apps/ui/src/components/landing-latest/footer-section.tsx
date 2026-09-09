@@ -52,9 +52,6 @@ export function FooterSection() {
             <a href="#features-section" className="text-foreground text-sm font-normal leading-5 hover:underline">
               Features
             </a>
-            <a href="#pricing-section" className="text-foreground text-sm font-normal leading-5 hover:underline">
-              Pricing
-            </a>
             <a href="#features-section" className="text-foreground text-sm font-normal leading-5 hover:underline">
               Integrations
             </a>

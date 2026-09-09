@@ -27,7 +27,6 @@ function AuthCta({ className }: { className?: string }) {
 export function Header() {
   const navItems = [
     { name: "Features", href: "#features-section" },
-    { name: "Pricing", href: "#pricing-section" },
     { name: "Testimonials", href: "#testimonials-section" }, // Changed from Docs to Testimonials
   ]
 

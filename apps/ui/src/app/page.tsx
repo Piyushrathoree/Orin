@@ -5,8 +5,6 @@ import { DashboardPreview } from "@/components/landing-latest/dashboard-preview"
 import { FAQSection } from "@/components/landing-latest/faq-section";
 import { FooterSection } from "@/components/landing-latest/footer-section";
 import { HeroSection } from "@/components/landing-latest/hero-section";
-import { LargeTestimonial } from "@/components/landing-latest/large-testimonial";
-import { PricingSection } from "@/components/landing-latest/pricing-section";
 import { SocialProof } from "@/components/landing-latest/social-proof";
 import { TestimonialGridSection } from "@/components/landing-latest/testimonial-grid-section";
 
@@ -35,19 +33,6 @@ const Page = () => {
           delay={0.2}
         >
           <BentoSection />
-        </AnimatedSection>
-        <AnimatedSection
-          className="relative z-10 mx-auto mt-8 max-w-[1320px] md:mt-16"
-          delay={0.2}
-        >
-          <LargeTestimonial />
-        </AnimatedSection>
-        <AnimatedSection
-          id="pricing-section"
-          className="relative z-10 mx-auto mt-8 max-w-[1320px] md:mt-16"
-          delay={0.2}
-        >
-          <PricingSection />
         </AnimatedSection>
         <AnimatedSection
           id="testimonials-section"
