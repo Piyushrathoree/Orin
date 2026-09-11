@@ -24,7 +24,11 @@ import { useIDEStore } from "@/stores/ideStore";
 import { useTopbar } from "@/hooks/topbar";
 import { useExplorer } from "@/hooks/explorer";
 import { useKeyShortcutListeners } from "@/hooks/key-shortcut-listners";
-import { useWebContainer } from "@/hooks/webcontainer";
+import {
+  pauseContainerFileSync,
+  resumeContainerFileSync,
+  useWebContainer,
+} from "@/hooks/webcontainer";
 import Chat from "@/components/ide-component/Chat";
 import ActivityBar from "@/components/ide-component/activity-bar";
 import SearchPanel from "@/components/ide-component/SearchPanel";
@@ -39,6 +43,8 @@ import type { ImperativePanelHandle } from "react-resizable-panels";
 import {
   applyOrinActions,
   fileTreeToCodeSnapshot,
+  filterEffectiveActions,
+  inlineInstallCommands,
   isAutoStartedDevCommand,
   localizeOrinActions,
   normalizeOrinPath,
@@ -55,6 +61,19 @@ interface IDEComponentProps {
 }
 
 const startedProjectGenerations = new Set<string>();
+/** True when `path` is a project package.json (optionally validating content). */
+function isPackageManifest(path?: string, content?: string): boolean {
+  if (!path || !path.replace(/\/+$/, "").endsWith("package.json")) return false;
+  if (content === undefined) return true;
+  try {
+    JSON.parse(content);
+    return true;
+  } catch {
+    // Mid-edit invalid JSON - wait for the next keystroke rather than install.
+    return false;
+  }
+}
+
 const NO_PROVIDER_ERROR = "Add an API key in Settings to start chatting";
 
 function normalizeSharedCodeFiles(files: CodeFile[]): CodeFile[] {
@@ -103,6 +122,8 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
     setFileStructure,
     refreshPreview,
     isContainerBooted,
+    containerError,
+    setupHint,
     setIsLoading,
     setLoadingMessage,
     undo,
@@ -206,8 +227,14 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
 
   const folderPreviewRef = useRef<FolderPreviewRef>(null);
 
-  const { initializeWebContainer, webContainerRef, runShellCommand, setTerminalOutput } =
-    useWebContainer();
+  const {
+    initializeWebContainer,
+    webContainerRef,
+    runShellCommand,
+    setTerminalOutput,
+    syncProjectDependencies,
+    onContainerFileChange,
+  } = useWebContainer();
 
   const devHint = WEBCONTAINER_VITE_DEV_COMMAND.label;
 
@@ -223,6 +250,64 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
   const editorSyncTimersRef = useRef(
     new Map<string, ReturnType<typeof setTimeout>>(),
   );
+
+  // Files created, edited or deleted from the terminal (or by npm) show up in
+  // the explorer and editor like any other change.
+  const handleContainerFileChanges = useCallback(
+    (changes: OrinAction[]) => {
+      // A file the editor is about to flush is newer in the tree than in the container.
+      const pendingEditorPaths = editorSyncTimersRef.current;
+      const currentTree = useIDEStore.getState().fileStructure;
+      const effective = filterEffectiveActions(
+        currentTree,
+        changes.filter(
+          (change) => change.type !== "file" || !pendingEditorPaths.has(change.path),
+        ),
+      );
+      if (effective.length === 0) return;
+
+      setFileStructure(
+        (previous: FileSystemTree) => applyOrinActions(previous, effective),
+        { recordHistory: false },
+      );
+
+      const deletedPaths = effective.flatMap((change) =>
+        change.type === "delete" ? [change.path] : [],
+      );
+      const updatedByPath = new Map(
+        effective.flatMap((change) =>
+          change.type === "file" ? [[change.path, change.content] as const] : [],
+        ),
+      );
+      const isDeleted = (path: string) =>
+        deletedPaths.some((deleted) => path === deleted || path.startsWith(`${deleted}/`));
+
+      setOpenTabs((tabs) =>
+        tabs.flatMap((tab) => {
+          if (isDeleted(tab.path)) return [];
+          const content = updatedByPath.get(tab.path);
+          // Unsaved edits win over what the terminal wrote; the editor keeps them.
+          if (content === undefined || tab.isDirty) return [tab];
+          return [{ ...tab, content, isDirty: false }];
+        }),
+      );
+      if (currentTab && isDeleted(currentTab.path)) {
+        setCurrentTabId(null);
+        setSelectedFile(null);
+      }
+
+      sendCodeSnapshot(
+        fileTreeToCodeSnapshot(useIDEStore.getState().fileStructure),
+      );
+    },
+    [currentTab, sendCodeSnapshot, setCurrentTabId, setFileStructure, setOpenTabs, setSelectedFile],
+  );
+
+  useEffect(
+    () => onContainerFileChange(handleContainerFileChanges),
+    [handleContainerFileChanges, onContainerFileChange],
+  );
+
   const lastCodeRevisionRef = useRef(0);
   const pendingCodeEventsRef = useRef<CodeSyncEvent[]>([]);
   const remoteCodeApplyRef = useRef<Promise<void>>(Promise.resolve());
@@ -243,6 +328,8 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
 
       const webContainer = webContainerRef.current;
       if (webContainer) {
+        pauseContainerFileSync();
+        try {
         for (const action of actions) {
           if (action.type === "shell") continue;
 
@@ -266,6 +353,9 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
           } catch (error) {
             console.error(`[IDE] Could not apply remote change to ${path}:`, error);
           }
+        }
+        } finally {
+          resumeContainerFileSync();
         }
       }
 
@@ -421,7 +511,15 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
 
         webContainer.fs
           .writeFile(`/${syncPath}`, content)
-          .then(() => refreshPreview())
+          .then(() => {
+            refreshPreview();
+            // A hand-edited package.json is the other way a new dependency
+            // arrives; install it instead of letting the preview fail to
+            // resolve the import.
+            if (isPackageManifest(syncPath, content)) {
+              void syncProjectDependencies();
+            }
+          })
           .catch((error: unknown) => {
             console.error("[IDE] Could not sync the edited file:", error);
           });
@@ -435,46 +533,66 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
       refreshPreview,
       sendCodeUpdate,
       setFileContent,
+      syncProjectDependencies,
       webContainerRef,
     ],
   );
 
   const applyGeneratedActions = useCallback(
-    async (actions: OrinAction[]) => {
+    async (rawActions: OrinAction[]) => {
       const currentTree = useIDEStore.getState().fileStructure;
+      // `npm i <pkg>` becomes a package.json edit so the user's own install covers it.
+      const actions = inlineInstallCommands(rawActions, currentTree);
       const localized = localizeOrinActions(actions, currentTree);
       const webContainer = webContainerRef.current;
       if (webContainer) {
-        for (const action of localized) {
-          if (action.type === "shell") continue;
+        pauseContainerFileSync();
+        try {
+          for (const action of localized) {
+            if (action.type === "shell") continue;
 
-          const path = `/${action.path}`;
+            const path = `/${action.path}`;
 
-          if (action.type === "delete") {
-            try {
-              await webContainer.fs.rm(path, { recursive: true });
-            } catch {
-              // The project tree remains the source of truth if the container is behind.
+            if (action.type === "delete") {
+              try {
+                await webContainer.fs.rm(path, { recursive: true });
+              } catch {
+                // The project tree remains the source of truth if the container is behind.
+              }
+              continue;
             }
-            continue;
-          }
 
-          if (action.type === "directory") {
-            await webContainer.fs.mkdir(path, { recursive: true });
-            continue;
-          }
+            if (action.type === "directory") {
+              await webContainer.fs.mkdir(path, { recursive: true });
+              continue;
+            }
 
-          const parentPath = path.slice(0, path.lastIndexOf("/"));
-          if (parentPath) {
-            await webContainer.fs.mkdir(parentPath, { recursive: true });
+            const parentPath = path.slice(0, path.lastIndexOf("/"));
+            if (parentPath) {
+              await webContainer.fs.mkdir(parentPath, { recursive: true });
+            }
+            await webContainer.fs.writeFile(path, action.content);
           }
-          await webContainer.fs.writeFile(path, action.content);
+        } finally {
+          resumeContainerFileSync();
         }
       }
 
       setFileStructure((previous: FileSystemTree) =>
         applyOrinActions(previous, localizeOrinActions(actions, previous)),
       );
+
+      // The generation prompt tells the model to declare dependencies in
+      // package.json rather than emit `npm i`, so nothing else would install
+      // them. This is a no-op when nothing new was declared.
+      if (
+        localized.some(
+          (action) =>
+            action.type !== "shell" && isPackageManifest(action.path),
+        )
+      ) {
+        await syncProjectDependencies();
+      }
 
       for (const action of localized) {
         if (action.type !== "shell") continue;
@@ -521,6 +639,7 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
       currentTab,
       refreshPreview,
       runShellCommand,
+      syncProjectDependencies,
       sendCodeSnapshot,
       setCurrentTabId,
       setFileStructure,
@@ -800,61 +919,68 @@ const IDEComponent = ({ projectId, initialPrompt }: IDEComponentProps) => {
               <ResizablePanelGroup direction="vertical" className="min-h-0 flex-1">
                 <ResizablePanel defaultSize={showTerminal ? 72 : 100} minSize={30}>
                   <div className="relative h-full overflow-hidden bg-background">
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={activeTab}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.15 }}
-                        className="h-full w-full"
-                      >
-                        {activeTab === "preview" ? (
-                          liveUrl ? (
-                            <PreviewFrame
-                              url={liveUrl}
-                              device={previewDevice}
-                              refreshKey={previewRefreshKey}
-                            />
+                    {activeTab === "preview" ? (
+                      liveUrl ? (
+                        <PreviewFrame
+                          url={liveUrl}
+                          device={previewDevice}
+                          refreshKey={previewRefreshKey}
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-background">
+                          <div className="text-center">
+                            <h3 className="mb-1 text-sm font-medium">
+                              {containerError
+                                ? "Preview unavailable"
+                                : "Server Not Running"}
+                            </h3>
+                            <p className="mb-3 text-xs text-muted-foreground">
+                              {containerError ??
+                                (setupHint
+                                  ? "Dependencies are not installed yet. Run these in the terminal to start the preview:"
+                                  : "If the server did not come up, run this in the terminal:")}
+                            </p>
+                            <pre className="text-left font-mono text-xs text-muted-foreground">
+                              {setupHint ?? devHint}
+                            </pre>
+                          </div>
+                        </div>
+                      )
+                    ) : (
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={activeTab}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="h-full w-full"
+                        >
+                          {currentTab ? (
+                            <div className="relative h-full">
+                              <CodeEditor
+                                key={currentTab.id}
+                                fileContent={currentTab.content}
+                                filePath={currentTab.path}
+                                onChange={handleEditorChange}
+                              />
+                            </div>
                           ) : (
-                            <div className="flex h-full items-center justify-center bg-background">
-                              <div className="text-center">
+                            <div className="relative flex h-full items-center justify-center bg-background">
+                              <div className="z-10 text-center">
                                 <h3 className="mb-1 text-sm font-medium">
-                                  Server Not Running
+                                  No File Open
                                 </h3>
-                                <p className="mb-3 text-xs text-muted-foreground">
-                                  Dependencies install automatically on open. Run this in the terminal:
+                                <p className="text-xs text-muted-foreground">
+                                  Select a file from the explorer to start
+                                  editing
                                 </p>
-                                <pre className="text-left font-mono text-xs text-muted-foreground">
-                                  {devHint}
-                                </pre>
                               </div>
                             </div>
-                          )
-                        ) : currentTab ? (
-                          <div className="relative h-full">
-                            <CodeEditor
-                              key={currentTab.id}
-                              fileContent={currentTab.content}
-                              filePath={currentTab.path}
-                              onChange={handleEditorChange}
-                            />
-                          </div>
-                        ) : (
-                          <div className="relative flex h-full items-center justify-center bg-background">
-                            <div className="z-10 text-center">
-                              <h3 className="mb-1 text-sm font-medium">
-                                No File Open
-                              </h3>
-                              <p className="text-xs text-muted-foreground">
-                                Select a file from the explorer to start
-                                editing
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </motion.div>
-                    </AnimatePresence>
+                          )}
+                        </motion.div>
+                      </AnimatePresence>
+                    )}
                   </div>
                 </ResizablePanel>
                 <ResizableHandle />

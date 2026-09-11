@@ -10,6 +10,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,8 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-
-const DEFAULT_MODEL = "Fable 5";
+import type { ActiveModel } from "@/lib/ai-providers";
 
 export type ComposerContextFile = {
   name: string;
@@ -40,6 +40,8 @@ interface IdePromptComposerProps {
   currentFile?: ComposerContextFile | null;
   modeLabel?: string;
   showModelSelector?: boolean;
+  /** The provider/model the backend will use. `undefined` while loading, `null` when none is configured. */
+  activeModel?: ActiveModel | null;
   onAttach?: () => void;
   attachHiddenInput?: ReactNode;
 }
@@ -54,15 +56,20 @@ export function IdePromptComposer({
   currentFile = null,
   modeLabel = "Chat",
   showModelSelector = true,
+  activeModel,
   onAttach,
   attachHiddenInput,
 }: IdePromptComposerProps) {
   const [fastMode, setFastMode] = useState(true);
-  const [model] = useState(DEFAULT_MODEL);
   const [contextOn, setContextOn] = useState(false);
   const localFileRef = useRef<HTMLInputElement>(null);
 
-  const modelLabel = fastMode ? model : `${model} · Standard`;
+  const modelLabel =
+    activeModel === undefined
+      ? "Loading model…"
+      : activeModel === null
+        ? "No model configured"
+        : activeModel.model;
   const canSubmit = value.trim().length > 0 && !disabled && !loading;
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -144,8 +151,9 @@ export function IdePromptComposer({
                 <button
                   type="button"
                   className={cn(
-                    "inline-flex max-w-[120px] items-center gap-0.5 truncate rounded-md px-1.5 py-0.5",
+                    "inline-flex max-w-[160px] items-center gap-0.5 truncate rounded-md px-1.5 py-0.5",
                     "text-[11px] text-muted-foreground/70 transition-colors",
+                    activeModel === null && "text-destructive/80 hover:text-destructive",
                     "hover:bg-muted/50 hover:text-muted-foreground",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                   )}
@@ -183,17 +191,32 @@ export function IdePromptComposer({
                   <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/55">
                     Model
                   </p>
-                  <button
-                    type="button"
+                  <Link
+                    href="/main/settings"
                     className={cn(
-                      "mt-1.5 flex w-full items-center justify-between rounded-md px-1 py-1",
+                      "mt-1.5 flex w-full items-center justify-between gap-2 rounded-md px-1 py-1",
                       "text-xs text-foreground transition-colors hover:bg-muted/50",
                     )}
-                    aria-label={`Selected model: ${model}`}
+                    aria-label={
+                      activeModel
+                        ? `Selected model: ${activeModel.model}. Change in Settings`
+                        : "Configure a model in Settings"
+                    }
                   >
-                    <span>{model}</span>
-                    <ChevronRight className="size-3 text-muted-foreground/50" aria-hidden />
-                  </button>
+                    {activeModel ? (
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate font-medium">{activeModel.model}</span>
+                        <span className="truncate text-[10px] text-muted-foreground/70">
+                          {activeModel.providerLabel}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {activeModel === undefined ? "Loading…" : "Add an API key in Settings"}
+                      </span>
+                    )}
+                    <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" aria-hidden />
+                  </Link>
                 </div>
               </PopoverContent>
             </Popover>

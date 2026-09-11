@@ -1,4 +1,9 @@
-import { DEFAULT_JWT_SECRET, verifyToken, AUTH_COOKIE_NAME } from "@orin/auth";
+import {
+  DEFAULT_JWT_SECRET,
+  verifyToken,
+  verifyWsTicket,
+  AUTH_COOKIE_NAME,
+} from "@orin/auth";
 import { WebSocketServer } from "ws";
 import type { RawData, WebSocket } from "ws";
 import {
@@ -271,22 +276,42 @@ async function canJoinRoom(roomId: string, token: string) {
   }
 }
 
+const jwtSecret = process.env.JWT_SECRET || DEFAULT_JWT_SECRET;
+
+// Cross-origin deployments authenticate with a short-lived ticket in the URL
+// (the session cookie is not sent to another origin). Same-origin/local setups
+// can still rely on the session cookie.
+async function authenticate(request: { url?: string; headers: { cookie?: string } }) {
+  const ticket = new URL(request.url ?? "/", "http://localhost").searchParams.get("ticket");
+  if (ticket) {
+    await verifyWsTicket(ticket, jwtSecret);
+    return ticket;
+  }
+
+  const token = cookieValue(request.headers.cookie, AUTH_COOKIE_NAME);
+  if (!token) return null;
+  await verifyToken(token, jwtSecret);
+  return token;
+}
+
 wss.on("connection", (ws: WebSocket, request) => {
-  void (async () => {
-    const token = cookieValue(request.headers.cookie, AUTH_COOKIE_NAME);
-    if (!token) {
-      ws.close(1008, "Authentication required");
-      return;
-    }
-
-    try {
-      await verifyToken(token, process.env.JWT_SECRET || DEFAULT_JWT_SECRET);
-    } catch {
+  // Attach listeners synchronously: a client may send "join" the moment the
+  // socket opens, before token verification has finished.
+  const authReady = authenticate(request).then(
+    (token) => {
+      if (!token) ws.close(1008, "Authentication required");
+      return token;
+    },
+    () => {
       ws.close(1008, "Invalid session");
-      return;
-    }
+      return null;
+    },
+  );
 
-    ws.on("message", (data: RawData) => {
+  ws.on("message", (data: RawData) => {
+    void authReady.then((token) => {
+      if (!token) return;
+
       const message = parseClientMessage(data.toString());
       if (!message) return;
 
@@ -313,10 +338,10 @@ wss.on("connection", (ws: WebSocket, request) => {
 
       relayPeerMessage(ws, message);
     });
+  });
 
-    ws.on("close", () => leaveRoom(ws));
-    ws.on("error", () => leaveRoom(ws));
-  })();
+  ws.on("close", () => leaveRoom(ws));
+  ws.on("error", () => leaveRoom(ws));
 });
 
 console.log(`[Orin WS] Listening on ws://localhost:${port}`);

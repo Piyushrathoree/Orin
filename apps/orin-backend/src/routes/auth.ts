@@ -1,9 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { Router, type Response as ExpressResponse } from "express";
-import { hashPassword, verifyPassword, createToken } from "@orin/auth";
-import { prisma } from "@orin/db";
+import { hashPassword, verifyPassword, createToken, createWsTicket } from "@orin/auth";
+import { AuthTokenType, prisma } from "@orin/db";
 import { config } from "../config/environment";
 import { requireAuth } from "../middleware/require-auth";
+import {
+  findValidAuthToken,
+  issueAuthToken,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from "../services/auth-email.service";
 
 const router = Router();
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -217,12 +223,18 @@ async function findOrCreateOAuthUser(
     await prisma.oAuthAccount.create({
       data: { provider, providerAccountId, userId: existingUser.id },
     });
-    return existingUser;
+    return existingUser.emailVerifiedAt
+      ? existingUser
+      : prisma.user.update({
+          where: { id: existingUser.id },
+          data: { emailVerifiedAt: new Date() },
+        });
   }
 
   return prisma.user.create({
     data: {
       email,
+      emailVerifiedAt: new Date(),
       oauthAccounts: { create: { provider, providerAccountId } },
     },
   });
@@ -245,10 +257,15 @@ router.post("/register", async (req, res) => {
     const user = await prisma.user.create({
       data: { email, passwordHash: await hashPassword(password) },
     });
-    await respondWithSession(res, user);
+    const verificationToken = await issueAuthToken(user.id, AuthTokenType.EMAIL_VERIFICATION);
+    await sendVerificationEmail(user.email, verificationToken);
+    res.status(201).json({
+      verificationRequired: true,
+      message: "Account created. Check your email to verify your account before signing in.",
+    });
   } catch (error) {
     console.error("[Orin API] Registration failed:", error);
-    res.status(500).json({ error: "Could not create account" });
+    res.status(500).json({ error: "Could not create account or send verification email" });
   }
 });
 
@@ -266,6 +283,13 @@ router.post("/login", async (req, res) => {
       res.status(401).json({ error: "Invalid email or password" });
       return;
     }
+    if (!user.emailVerifiedAt) {
+      res.status(403).json({
+        error: "Please verify your email before signing in",
+        verificationRequired: true,
+      });
+      return;
+    }
     await respondWithSession(res, user);
   } catch (error) {
     console.error("[Orin API] Login failed:", error);
@@ -273,8 +297,125 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.post("/forgot-password", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!validEmail(email)) {
+    res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user?.passwordHash) {
+      const resetToken = await issueAuthToken(user.id, AuthTokenType.PASSWORD_RESET);
+      await sendPasswordResetEmail(user.email, resetToken);
+    }
+    res.json({ message: "If an account exists for that email, a password reset link has been sent" });
+  } catch (error) {
+    console.error("[Orin API] Password reset email failed:", error);
+    res.status(500).json({ error: "Could not send password reset email" });
+  }
+});
+
+router.post("/resend-verification", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!validEmail(email)) {
+    res.status(400).json({ error: "Enter a valid email address" });
+    return;
+  }
+
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (user && !user.emailVerifiedAt) {
+      const verificationToken = await issueAuthToken(user.id, AuthTokenType.EMAIL_VERIFICATION);
+      await sendVerificationEmail(user.email, verificationToken);
+    }
+    res.json({ message: "If your account needs verification, a verification link has been sent" });
+  } catch (error) {
+    console.error("[Orin API] Verification email resend failed:", error);
+    res.status(500).json({ error: "Could not send verification email" });
+  }
+});
+
+router.get("/verify-email", async (req, res) => {
+  const token = readQuery(req.query.token);
+  const authToken = token
+    ? await findValidAuthToken(token, AuthTokenType.EMAIL_VERIFICATION)
+    : null;
+
+  if (!authToken) {
+    res.status(400).json({ error: "This verification link is invalid or expired" });
+    return;
+  }
+
+  try {
+    const verifiedAt = new Date();
+    const consumed = await prisma.authToken.updateMany({
+      where: { id: authToken.id, usedAt: null, expiresAt: { gt: verifiedAt } },
+      data: { usedAt: verifiedAt },
+    });
+    if (consumed.count !== 1) {
+      res.status(400).json({ error: "This verification link is invalid or expired" });
+      return;
+    }
+    await prisma.user.update({
+      where: { id: authToken.userId },
+      data: { emailVerifiedAt: verifiedAt },
+    });
+    res.json({ message: "Email verified successfully" });
+  } catch (error) {
+    console.error("[Orin API] Email verification failed:", error);
+    res.status(500).json({ error: "Could not verify email" });
+  }
+});
+
+router.post("/reset-password", async (req, res) => {
+  const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+  const password = typeof req.body?.password === "string" ? req.body.password : "";
+  if (!token || password.length < 8 || password.length > 200) {
+    res.status(400).json({ error: "A valid reset token and a password of at least 8 characters are required" });
+    return;
+  }
+
+  const authToken = await findValidAuthToken(token, AuthTokenType.PASSWORD_RESET);
+  if (!authToken) {
+    res.status(400).json({ error: "This password reset link is invalid or expired" });
+    return;
+  }
+
+  try {
+    const resetAt = new Date();
+    const consumed = await prisma.authToken.updateMany({
+      where: { id: authToken.id, usedAt: null, expiresAt: { gt: resetAt } },
+      data: { usedAt: resetAt },
+    });
+    if (consumed.count !== 1) {
+      res.status(400).json({ error: "This password reset link is invalid or expired" });
+      return;
+    }
+    await prisma.user.update({
+      where: { id: authToken.userId },
+      data: { passwordHash: await hashPassword(password), emailVerifiedAt: resetAt },
+    });
+    res.json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error("[Orin API] Password reset failed:", error);
+    res.status(500).json({ error: "Could not reset password" });
+  }
+});
+
 router.get("/me", requireAuth, (req, res) => {
   res.json({ user: req.user });
+});
+
+// Mints a short-lived ticket the browser attaches to the WebSocket URL, since the
+// httpOnly session cookie is not sent to the WebSocket server's origin.
+router.post("/ws-ticket", requireAuth, async (req, res) => {
+  if (req.authKind !== "session" || !req.user) {
+    res.status(401).json({ error: "A signed-in session is required" });
+    return;
+  }
+  res.json({ ticket: await createWsTicket(req.user, config.jwtSecret) });
 });
 
 router.post("/exchange", (req, res) => {

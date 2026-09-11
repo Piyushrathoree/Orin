@@ -18,10 +18,30 @@ model User {
   passwordHash    String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+  emailVerifiedAt DateTime?
   projects        Project[]
   oauthAccounts   OAuthAccount[]
+  authTokens      AuthToken[]
   providerKeys    UserProviderKey[]
   defaultProvider AiProvider?
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model AuthToken {
+  id        String        @id @default(uuid())
+  tokenHash String        @unique
+  type      AuthTokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
 }
 
 enum AiProvider {

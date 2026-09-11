@@ -22,7 +22,9 @@ app.get('/health', (_req, res) => {
     ? Boolean(config.geminiApiKey)
     : config.aiProvider === 'openrouter'
       ? Boolean(config.openrouterApiKey && config.openrouterModel)
-    : Boolean(config.localBaseUrl && config.localModel);
+      : config.aiProvider === 'local'
+        ? Boolean(config.localBaseUrl && config.localModel)
+        : false;
 
   res.json({
     status: 'ok',

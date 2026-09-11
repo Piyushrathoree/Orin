@@ -1,7 +1,9 @@
 import type { FileSystemTree } from "@webcontainer/api";
 import {
+  addDependenciesToManifest,
   getProjectRootFromTree,
   isDevServerCommand,
+  parseInstallCommand,
   splitShellCommandChain,
 } from "@/lib/package-manager";
 
@@ -211,6 +213,173 @@ export function localizeOrinActions(
     }
     return { ...action, path: `${prefix}/${action.path}` };
   });
+}
+
+function treeHasPath(tree: FileSystemTree, path: string): boolean {
+  let current: FileSystemTree = tree;
+  const parts = path.split("/").filter(Boolean);
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const node = current[parts[index]];
+    if (!node) return false;
+    if (index === parts.length - 1) return true;
+    if (!("directory" in node)) return false;
+    current = node.directory;
+  }
+
+  return parts.length > 0;
+}
+
+function readTreeText(tree: FileSystemTree, path: string): string | null {
+  let current: FileSystemTree = tree;
+  const parts = path.split("/").filter(Boolean);
+
+  for (let index = 0; index < parts.length; index += 1) {
+    const node = current[parts[index]];
+    if (!node) return null;
+    if (index === parts.length - 1) {
+      if (!("file" in node) || !("contents" in node.file)) return null;
+      const { contents } = node.file;
+      return typeof contents === "string" ? contents : new TextDecoder().decode(contents);
+    }
+    if (!("directory" in node)) return null;
+    current = node.directory;
+  }
+
+  return null;
+}
+
+/** Drops actions that would leave the tree as it already is. Paths are tree-relative. */
+export function filterEffectiveActions(
+  tree: FileSystemTree,
+  actions: OrinAction[],
+): OrinAction[] {
+  return actions.filter((action) => {
+    switch (action.type) {
+      case "file":
+        return readTreeText(tree, action.path) !== action.content;
+      case "directory":
+        return !treeHasPath(tree, action.path);
+      case "delete":
+        return treeHasPath(tree, action.path);
+      default:
+        return true;
+    }
+  });
+}
+
+const MANIFEST_PATH = "package.json";
+
+/**
+ * Rewrites `npm i <pkg>` shell actions into package.json edits. Installs are
+ * the user's to run, and a dependency that only lives in the container's
+ * node_modules is lost on reload - declaring it in the tree's manifest means a
+ * single install brings everything in. Bare installs are dropped entirely.
+ */
+export function inlineInstallCommands(
+  actions: OrinAction[],
+  tree: FileSystemTree,
+): OrinAction[] {
+  const prefix = projectFolderPrefix(tree);
+  let manifest = readTreeText(tree, prefix ? `${prefix}/${MANIFEST_PATH}` : MANIFEST_PATH);
+  const result: OrinAction[] = [];
+
+  for (const action of actions) {
+    if (action.type === "file" && action.path === MANIFEST_PATH) {
+      manifest = action.content;
+      result.push(action);
+      continue;
+    }
+    if (action.type !== "shell") {
+      result.push(action);
+      continue;
+    }
+
+    const passthrough: string[] = [];
+    let manifestChanged = false;
+    for (const segment of splitShellCommandChain(action.command)) {
+      const install = parseInstallCommand(segment);
+      if (!install) {
+        passthrough.push(segment);
+        continue;
+      }
+      if (Object.keys(install.packages).length === 0) continue;
+
+      const next = manifest === null ? null : addDependenciesToManifest(manifest, install);
+      if (next === null) {
+        // No manifest to edit, or unparsable: leave the command to run as-is.
+        passthrough.push(segment);
+        continue;
+      }
+      if (next !== manifest) {
+        manifest = next;
+        manifestChanged = true;
+      }
+    }
+
+    if (manifestChanged && manifest !== null) {
+      result.push({ type: "file", path: MANIFEST_PATH, content: manifest });
+    }
+    if (passthrough.length > 0) {
+      result.push({ type: "shell", command: passthrough.join(" && ") });
+    }
+  }
+
+  return result;
+}
+
+export type OrinChangeKind = "added" | "updated" | "deleted" | "folder" | "command";
+
+export type OrinChange = {
+  kind: OrinChangeKind;
+  /** Project-relative path for file changes, the command text for shell actions. */
+  label: string;
+};
+
+/**
+ * Human-readable summary of what a response will do to the project. Must be
+ * called *before* the actions are applied, otherwise every file looks updated.
+ * Paths are shown relative to the project root, as the AI wrote them.
+ */
+export function describeOrinActions(
+  actions: OrinAction[],
+  tree: FileSystemTree,
+): OrinChange[] {
+  const localized = localizeOrinActions(actions, tree);
+  const byPath = new Map<string, OrinChange>();
+  const commands: OrinChange[] = [];
+
+  actions.forEach((action, index) => {
+    if (action.type === "shell") {
+      commands.push({ kind: "command", label: action.command });
+      return;
+    }
+
+    const localizedAction = localized[index];
+    const localizedPath =
+      localizedAction && localizedAction.type !== "shell"
+        ? localizedAction.path
+        : action.path;
+    const existed = treeHasPath(tree, localizedPath);
+
+    // Later actions on the same path win, but "added" sticks: a file created
+    // and then rewritten in one response is still new to the project.
+    const previous = byPath.get(action.path);
+    let kind: OrinChangeKind;
+    if (action.type === "delete") {
+      kind = "deleted";
+    } else if (action.type === "directory") {
+      kind = "folder";
+    } else if (previous?.kind === "added" || !existed) {
+      kind = "added";
+    } else {
+      kind = "updated";
+    }
+
+    byPath.set(action.path, { kind, label: action.path });
+  });
+
+  return [...byPath.values(), ...commands];
 }
 
 export function isAutoStartedDevCommand(command: string): boolean {

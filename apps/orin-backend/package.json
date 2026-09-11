@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc -b",
+    "build": "bun run --cwd ../../packages/db generate && tsc -b",
     "typecheck": "tsc -b --pretty false"
   },
   "keywords": [],
@@ -18,12 +18,14 @@
     "@orin/db": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "nodemailer": "^7.0.13"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/node": "^22.15.1",
+    "@types/nodemailer": "^7.0.4",
     "tsx": "^4.19.2"
   }
 }

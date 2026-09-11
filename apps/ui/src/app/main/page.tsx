@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { deleteNodeModulesSnapshot } from "@/lib/node-modules-cache";
 import {
   createProjectFiles,
   DEFAULT_PROJECT_NAME,
@@ -270,6 +271,7 @@ const Page = () => {
       window.localStorage.removeItem(getProjectStorageKey(projectId));
       window.localStorage.removeItem(getPreviousProjectStorageKey(projectId));
       window.localStorage.removeItem(getLegacyProjectStorageKey(projectId));
+      void deleteNodeModulesSnapshot(projectId);
       setProjects(nextProjects);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete project");

@@ -34,6 +34,10 @@ export type PeerMessage = {
   fromPeerId?: string;
 };
 
+const websocketUrl =
+  process.env.NEXT_PUBLIC_WS_URL?.trim() ||
+  (process.env.NODE_ENV === "production" ? null : "ws://localhost:8080");
+
 export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
   const [message, setMessage] = useState<string>("");
   const [peerMessages, setPeerMessages] = useState<PeerMessage[]>([]);
@@ -155,6 +159,8 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
   };
 
   useEffect(() => {
+    if (!websocketUrl) return;
+
     let disposed = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectAttempts = 0;
@@ -212,12 +218,39 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
       };
     };
 
-    const connectSocket = () => {
+    const scheduleReconnect = () => {
+      const delay = Math.min(5000, 500 * 2 ** reconnectAttempts);
+      reconnectAttempts += 1;
+      reconnectTimer = setTimeout(connectSocket, delay);
+    };
+
+    const connectSocket = async () => {
       if (disposed) return;
 
-      ws.current = new WebSocket(
-        process.env.NEXT_PUBLIC_WS_URL?.trim() || "ws://localhost:8080",
-      );
+      // The session cookie is httpOnly and only sent to this app's origin, so
+      // the WebSocket server (another origin in production) is authenticated
+      // with a short-lived ticket instead.
+      let ticket: string;
+      try {
+        const response = await fetch("/api/orin/ws-ticket", { method: "POST" });
+        if (response.status === 401) {
+          toast.error("Sign in again to use real-time collaboration");
+          return;
+        }
+        const payload = (await response.json()) as { ticket?: unknown };
+        if (!response.ok || typeof payload.ticket !== "string") {
+          throw new Error("No ticket");
+        }
+        ticket = payload.ticket;
+      } catch {
+        if (!disposed) scheduleReconnect();
+        return;
+      }
+      if (disposed) return;
+
+      const url = new URL(websocketUrl);
+      url.searchParams.set("ticket", ticket);
+      ws.current = new WebSocket(url);
       ws.current.onopen = () => {
         reconnectAttempts = 0;
         joinedRoomRef.current = false;
@@ -343,14 +376,11 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
       ws.current.onclose = (event) => {
         joinedRoomRef.current = false;
         if (disposed || event.code === 1008) return;
-
-        const delay = Math.min(5000, 500 * 2 ** reconnectAttempts);
-        reconnectAttempts += 1;
-        reconnectTimer = setTimeout(connectSocket, delay);
+        scheduleReconnect();
       };
     };
 
-    connectSocket();
+    void connectSocket();
 
     return () => {
       disposed = true;
@@ -662,6 +692,7 @@ export const useWsRtcConnection = ({ roomId }: { roomId: string }) => {
     isVideoEnabled,
     isInCall,
     peerConnected,
+    isCollaborationAvailable: Boolean(websocketUrl),
     toggleAudio,
     toggleVideo,
     endCall,

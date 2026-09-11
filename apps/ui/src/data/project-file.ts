@@ -216,6 +216,7 @@ function createPackageJson(name: string): string {
         preview: "vite preview --host 0.0.0.0 --port 3000",
       },
       dependencies: {
+        "lucide-react": "^0.563.0",
         react: "^19.2.8",
         "react-dom": "^19.2.8",
       },
@@ -246,7 +247,12 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: { host: '0.0.0.0', port: 3000 },
+  server: {
+    host: '0.0.0.0',
+    port: 3000,
+    allowedHosts: true,
+    hmr: { clientPort: 443 },
+  },
 })
 `;
 

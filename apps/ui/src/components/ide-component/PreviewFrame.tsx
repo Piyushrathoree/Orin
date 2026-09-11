@@ -1,110 +1,78 @@
-"use client";
+'use client';
 
-import React, { useState, useEffect, useRef } from "react";
-import { motion } from "motion/react";
+import React, { useEffect, useState } from 'react';
 
 interface PreviewFrameProps {
-  url: string;
-  device: "desktop" | "tablet" | "mobile";
-  refreshKey: number;
+    url: string;
+    device: 'desktop' | 'tablet' | 'mobile';
+    refreshKey: number;
 }
 
 const deviceConfigs = {
-  desktop: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 0,
-  },
-  tablet: {
-    width: 768,
-    height: 1024,
-    borderRadius: 8,
-  },
-  mobile: {
-    width: 375,
-    height: 812,
-    borderRadius: 8,
-  },
-};
+    desktop: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 0,
+    },
+    tablet: {
+        width: 768,
+        height: 1024,
+        borderRadius: 8,
+    },
+    mobile: {
+        width: 375,
+        height: 812,
+        borderRadius: 8,
+    },
+} as const;
 
 const PreviewFrame: React.FC<PreviewFrameProps> = ({ url, device, refreshKey }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const config = deviceConfigs[device];
+    const config = deviceConfigs[device];
+    const isDesktop = device === 'desktop';
+    const frameKey = `${url}-${refreshKey}`;
+    const [loadedFrame, setLoadedFrame] = useState<string | null>(null);
+    const [slowFrame, setSlowFrame] = useState<string | null>(null);
+    const isLoaded = loadedFrame === frameKey;
+    const isSlow = slowFrame === frameKey;
 
-  useEffect(() => {
-    const calculateScale = () => {
-      if (!containerRef.current) return;
-      
-      if (device === "desktop") {
-        setScale(1);
-        return;
-      }
+    useEffect(() => {
+        const timer = window.setTimeout(() => setSlowFrame(frameKey), 8_000);
+        return () => window.clearTimeout(timer);
+    }, [frameKey]);
 
-      const padding = 40;
-      const containerWidth = containerRef.current.clientWidth - padding;
-      const containerHeight = containerRef.current.clientHeight - padding;
-      
-      const targetWidth = typeof config.width === "number" ? config.width : containerWidth;
-      const targetHeight = typeof config.height === "number" ? config.height : containerHeight;
-
-      const scaleW = containerWidth / targetWidth;
-      const scaleH = containerHeight / targetHeight;
-      const newScale = Math.min(scaleW, scaleH, 1);
-
-      setScale(newScale);
-    };
-
-    calculateScale();
-    
-    const observer = new ResizeObserver(calculateScale);
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, [device, config]);
-
-  return (
-    <div
-      ref={containerRef}
-      className="w-full h-full flex items-center justify-center bg-background overflow-hidden relative"
-    >
-      <motion.div
-        layout
-        initial={false}
-        animate={{
-          width: config.width,
-          height: config.height,
-          borderRadius: config.borderRadius,
-          scale: scale,
-        }}
-        onAnimationStart={() => setIsAnimating(true)}
-        onAnimationComplete={() => setIsAnimating(false)}
-        transition={{
-          type: "spring",
-          stiffness: 300,
-          damping: 30,
-        }}
-        style={{
-          transformOrigin: "center center",
-          willChange: "transform, width, height",
-        }}
-        className="relative overflow-hidden"
-      >
-        <iframe
-          key={refreshKey}
-          src={url}
-          className="w-full h-full border-0 bg-white"
-          title="Preview"
-          style={{ 
-            pointerEvents: isAnimating ? 'none' : 'auto'
-          }}
-        />
-      </motion.div>
-    </div>
-  );
+    return (
+        <div className="relative flex h-full w-full items-center justify-center overflow-auto bg-background">
+            <div
+                className="relative overflow-hidden bg-white"
+                style={
+                    isDesktop
+                        ? { width: '100%', height: '100%' }
+                        : {
+                              width: config.width,
+                              height: config.height,
+                              borderRadius: config.borderRadius,
+                              flexShrink: 0,
+                          }
+                }
+            >
+                {!isLoaded && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background px-6 text-center text-sm text-muted-foreground">
+                        {isSlow
+                            ? 'Preview is taking longer than expected. Check the terminal for errors.'
+                            : 'Loading preview...'}
+                    </div>
+                )}
+                <iframe
+                    key={frameKey}
+                    src={url}
+                    className="h-full w-full border-0 bg-white"
+                    title="Preview"
+                    allow="fullscreen; clipboard-read; clipboard-write"
+                    onLoad={() => setLoadedFrame(frameKey)}
+                />
+            </div>
+        </div>
+    );
 };
 
 export default PreviewFrame;

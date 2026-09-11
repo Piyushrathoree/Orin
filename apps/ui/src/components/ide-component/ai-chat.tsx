@@ -1,8 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FileCode2, MessageSquare, Trash2 } from "lucide-react";
+import {
+  FileCode2,
+  FilePen,
+  FilePlus2,
+  FolderPlus,
+  MessageSquare,
+  Terminal,
+  Trash2,
+} from "lucide-react";
 import type { FileSystemTree } from "@webcontainer/api";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,11 +33,21 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  describeOrinActions,
   fileTreeToPrompt,
   getOrinResponseText,
+  inlineInstallCommands,
   parseOrinActions,
   type OrinAction,
+  type OrinChange,
+  type OrinChangeKind,
 } from "@/lib/orin-artifact";
+import {
+  fetchProviderSettings,
+  getActiveModel,
+  type ActiveModel,
+} from "@/lib/ai-providers";
+import { cn } from "@/lib/utils";
 import {
   IdePromptComposer,
   type ComposerContextFile,
@@ -47,6 +65,7 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   actions?: OrinAction[];
+  changes?: OrinChange[];
   actionStatus?: "pending" | "applied" | "cancelled";
 };
 
@@ -57,17 +76,90 @@ type PendingActions = {
 
 const NO_PROVIDER_ERROR = "Add an API key in Settings to start chatting";
 
-function actionSummary(actions: OrinAction[]) {
-  const createdOrUpdated = actions.filter((action) => action.type === "file").length;
-  const deleted = actions.filter((action) => action.type === "delete").length;
-  const shellCommands = actions.filter((action) => action.type === "shell").length;
-  const parts = [
-    createdOrUpdated > 0 && `${createdOrUpdated} file${createdOrUpdated === 1 ? "" : "s"} updated`,
-    deleted > 0 && `${deleted} file${deleted === 1 ? "" : "s"} deleted`,
-    shellCommands > 0 && `${shellCommands} command${shellCommands === 1 ? "" : "s"} run`,
-  ].filter(Boolean);
+const CHANGE_KIND_META: Record<
+  OrinChangeKind,
+  { label: string; Icon: React.ComponentType<{ className?: string }>; className: string }
+> = {
+  added: { label: "Added", Icon: FilePlus2, className: "text-emerald-600 dark:text-emerald-400" },
+  updated: { label: "Updated", Icon: FilePen, className: "text-sky-600 dark:text-sky-400" },
+  deleted: { label: "Deleted", Icon: Trash2, className: "text-destructive" },
+  folder: { label: "Folder", Icon: FolderPlus, className: "text-muted-foreground" },
+  command: { label: "Ran", Icon: Terminal, className: "text-muted-foreground" },
+};
+
+const CHANGE_KIND_ORDER: OrinChangeKind[] = ["added", "updated", "deleted", "folder", "command"];
+
+function pluralize(count: number, noun: string) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function changeSummary(changes: OrinChange[]) {
+  const counts = new Map<OrinChangeKind, number>();
+  for (const change of changes) counts.set(change.kind, (counts.get(change.kind) ?? 0) + 1);
+
+  const parts = CHANGE_KIND_ORDER.flatMap((kind) => {
+    const count = counts.get(kind);
+    if (!count) return [];
+    if (kind === "command") return [pluralize(count, "command")];
+    if (kind === "folder") return [pluralize(count, "folder") + " created"];
+    return [`${count} ${kind}`];
+  });
 
   return parts.join(" · ");
+}
+
+function ChangeList({
+  changes,
+  status,
+}: {
+  changes: OrinChange[];
+  status: ChatMessage["actionStatus"];
+}) {
+  const heading =
+    status === "pending"
+      ? "Changes awaiting approval"
+      : status === "cancelled"
+        ? "Changes not applied"
+        : changeSummary(changes);
+
+  return (
+    <div className="border-t pt-2 text-xs">
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <FileCode2 className="size-3" />
+        <span>{heading}</span>
+      </div>
+      <ul
+        className={cn(
+          "mt-1.5 flex max-h-48 flex-col gap-0.5 overflow-y-auto",
+          status === "cancelled" && "opacity-60",
+        )}
+      >
+        {changes.map((change, index) => {
+          const meta = CHANGE_KIND_META[change.kind];
+          return (
+            <li
+              key={`${change.kind}-${change.label}-${index}`}
+              className="flex min-w-0 items-center gap-1.5"
+              title={`${meta.label}: ${change.label}`}
+            >
+              <meta.Icon className={cn("size-3 shrink-0", meta.className)} />
+              <span className={cn("w-14 shrink-0 text-[10px] font-medium uppercase tracking-wide", meta.className)}>
+                {meta.label}
+              </span>
+              <span
+                className={cn(
+                  "truncate font-mono text-[11px] text-foreground/90",
+                  change.kind === "deleted" && "line-through",
+                )}
+              >
+                {change.label}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 const AiChat: React.FC<AiChatProps> = ({
@@ -82,7 +174,22 @@ const AiChat: React.FC<AiChatProps> = ({
   const [error, setError] = useState<Error | null>(null);
   const [pendingActions, setPendingActions] = useState<PendingActions | null>(null);
   const [isApplyingActions, setIsApplyingActions] = useState(false);
+  const [activeModel, setActiveModel] = useState<ActiveModel | null | undefined>(undefined);
   const loading = status === "loading";
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchProviderSettings()
+      .then((providers) => {
+        if (!cancelled) setActiveModel(getActiveModel(providers));
+      })
+      .catch(() => {
+        if (!cancelled) setActiveModel(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const pendingDeletions =
     pendingActions?.actions.filter((action) => action.type === "delete") ?? [];
@@ -181,10 +288,16 @@ const AiChat: React.FC<AiChatProps> = ({
       }
 
       const actions = parseOrinActions(payload.response);
+      // Snapshot before applying, so new files are reported as added rather than
+      // updated, and after install commands are folded into package.json.
+      const changes = describeOrinActions(
+        inlineInstallCommands(actions, fileStructure),
+        fileStructure,
+      );
       const responseText = getOrinResponseText(payload.response);
       const assistantContent =
         responseText ||
-        (actions.length > 0 ? "Updated the project files." : payload.response);
+        (actions.length > 0 ? "Here's what changed:" : payload.response);
 
       const assistantMessageId = `assistant-${Date.now()}`;
       const requiresConfirmation = actions.some((action) => action.type === "delete");
@@ -195,6 +308,7 @@ const AiChat: React.FC<AiChatProps> = ({
           role: "assistant",
           content: assistantContent,
           actions,
+          changes,
           actionStatus: actions.length > 0 ? (requiresConfirmation ? "pending" : "applied") : undefined,
         },
       ]);
@@ -278,19 +392,8 @@ const AiChat: React.FC<AiChatProps> = ({
                   <Message from={message.role} key={message.id}>
                     <MessageContent>
                       <Response>{message.content}</Response>
-                      {message.actions && message.actions.length > 0 && (
-                        <div className="flex items-center gap-1.5 border-t pt-2 text-xs text-muted-foreground">
-                          {message.actions.some((action) => action.type === "delete") ? (
-                            <Trash2 className="size-3" />
-                          ) : (
-                            <FileCode2 className="size-3" />
-                          )}
-                          {message.actionStatus === "pending"
-                            ? "Changes awaiting approval"
-                            : message.actionStatus === "cancelled"
-                              ? "Changes not applied"
-                              : actionSummary(message.actions)}
-                        </div>
+                      {message.changes && message.changes.length > 0 && (
+                        <ChangeList changes={message.changes} status={message.actionStatus} />
                       )}
                     </MessageContent>
                   </Message>
@@ -323,6 +426,7 @@ const AiChat: React.FC<AiChatProps> = ({
             disabled={loading || pendingActions !== null || !runtimeReady}
             loading={loading}
             currentFile={currentFile}
+            activeModel={activeModel}
             placeholder={
               runtimeReady
                 ? "Plan, search, build anything"

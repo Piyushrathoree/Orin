@@ -36,6 +36,9 @@ interface IDEStore {
   setLoadingMessage: (message: string) => void;
   containerError: string | null;
   setContainerError: (error: string | null) => void;
+  /** Commands the user must run before the preview can start, or null once nothing is pending. */
+  setupHint: string | null;
+  setSetupHint: (hint: string | null) => void;
   isContainerBooted: boolean;
   setIsContainerBooted: (booted: boolean) => void;
   previewDevice: "desktop" | "tablet" | "mobile";
@@ -123,6 +126,8 @@ const createIDEStore = () =>
     setLoadingMessage: (message) => set({ loadingMessage: message }),
     containerError: null,
     setContainerError: (error) => set({ containerError: error }),
+    setupHint: null,
+    setSetupHint: (hint) => set({ setupHint: hint }),
     isContainerBooted: false,
     setIsContainerBooted: (booted) => set({ isContainerBooted: booted }),
     previewDevice: "desktop",

@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: orin-api
+    runtime: node
+    plan: free
+    buildCommand: bun install --frozen-lockfile && bun run db:generate && bunx prisma migrate deploy --config packages/db/prisma.config.ts && bun run --cwd apps/orin-backend build
+    startCommand: bun run --cwd apps/orin-backend start
+    healthCheckPath: /health
+    envVars:
+      - key: BUN_VERSION
+        value: 1.3.5
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: SECRETS_ENCRYPTION_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: BACKEND_URL
+        sync: false

@@ -32,6 +32,62 @@ export const WEBCONTAINER_VITE_DEV_COMMAND: PackageCommand = {
   label: "vite --host 0.0.0.0 --port 3000",
 };
 
+export function patchViteConfigForWebContainer(source: string): string {
+  const hasAllowedHosts = /\ballowedHosts\b/.test(source);
+  const hasHmrClientPort = /\bclientPort\b/.test(source);
+  if (hasAllowedHosts && hasHmrClientPort) return source;
+
+  let next = source;
+
+  const injectServerBlock = (snippet: string) => {
+    if (/server\s*:\s*\{/.test(next)) {
+      next = next.replace(/server\s*:\s*\{/, `server: {\n    ${snippet}`);
+      return true;
+    }
+    if (/defineConfig\s*\(\s*\{/.test(next)) {
+      next = next.replace(
+        /defineConfig\s*\(\s*\{/,
+        `defineConfig({\n  server: {\n    ${snippet}\n  },`,
+      );
+      return true;
+    }
+    if (/export default\s*\{/.test(next)) {
+      next = next.replace(
+        /export default\s*\{/,
+        `export default {\n  server: {\n    ${snippet}\n  },`,
+      );
+      return true;
+    }
+    return false;
+  };
+
+  if (!hasAllowedHosts) {
+    injectServerBlock("allowedHosts: true,");
+  }
+  if (!/\bclientPort\b/.test(next)) {
+    injectServerBlock("hmr: { clientPort: 443 },");
+  }
+
+  return next;
+}
+
+export async function ensureViteWebContainerServerConfig(
+  fs: WritableFs,
+  projectRoot: string,
+): Promise<void> {
+  for (const name of VITE_CONFIG_FILES) {
+    const path = joinPath(projectRoot, name);
+    if (!(await fileExists(fs, path))) continue;
+
+    const source = await fs.readFile(path, "utf-8");
+    const next = patchViteConfigForWebContainer(source);
+    if (next !== source) {
+      await fs.writeFile(path, next);
+    }
+    return;
+  }
+}
+
 function joinPath(root: string, ...parts: string[]): string {
   if (root === "/") {
     return `/${parts.join("/")}`;
@@ -223,6 +279,7 @@ export async function getWebContainerDevCommand(
   }
 
   if (await isViteProject(fs, projectRoot)) {
+    await ensureViteWebContainerServerConfig(fs, projectRoot);
     return WEBCONTAINER_VITE_DEV_COMMAND;
   }
 
@@ -240,6 +297,71 @@ export async function needsInstall(
   }
 
   return !(await dirExists(fs, joinPath(projectRoot, "node_modules")));
+}
+
+/** Specs npm cannot fetch from the registry, so they never count as "missing". */
+const UNFETCHABLE_SPEC_PREFIXES = ["workspace:", "file:", "link:", "portal:"];
+
+/**
+ * Stable fingerprint of everything an install depends on. Used to tell whether
+ * a cached `node_modules` snapshot still matches the current package.json.
+ */
+export function dependencyFingerprint(pkg: {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+} | null): string {
+  if (!pkg) return "";
+
+  const entries = [
+    ...Object.entries(pkg.dependencies ?? {}).map(
+      ([name, spec]) => `d:${name}@${spec}`,
+    ),
+    ...Object.entries(pkg.devDependencies ?? {}).map(
+      ([name, spec]) => `v:${name}@${spec}`,
+    ),
+  ];
+
+  return entries.sort().join("\n");
+}
+
+export async function readDependencyFingerprint(
+  fs: FsLike,
+  projectRoot: string,
+): Promise<string> {
+  return dependencyFingerprint(await readPackageJson(fs, projectRoot));
+}
+
+/**
+ * Names declared in package.json that are absent from `node_modules`. Lets a
+ * restored snapshot be topped up with just the newly added packages instead of
+ * reinstalling everything.
+ */
+export async function getMissingDependencies(
+  fs: FsLike,
+  projectRoot: string,
+): Promise<string[]> {
+  const pkg = await readPackageJson(fs, projectRoot);
+  if (!pkg) return [];
+
+  const declared = { ...pkg.dependencies, ...pkg.devDependencies };
+  const missing: string[] = [];
+
+  for (const [name, spec] of Object.entries(declared)) {
+    if (
+      typeof spec === "string" &&
+      UNFETCHABLE_SPEC_PREFIXES.some((prefix) => spec.startsWith(prefix))
+    ) {
+      continue;
+    }
+
+    const installed = await fileExists(
+      fs,
+      joinPath(projectRoot, "node_modules", name, "package.json"),
+    );
+    if (!installed) missing.push(name);
+  }
+
+  return missing;
 }
 
 function treeHasFile(tree: FileSystemTree, targetPath: string): boolean {
@@ -344,4 +466,97 @@ export function parseShellCommand(rawCommand: string): PackageCommand {
     args: parts.slice(1),
     label: trimmed,
   };
+}
+
+export interface InstallCommand {
+  /** `name` → version spec. Bare names get `latest`, the same tag npm resolves. */
+  packages: Record<string, string>;
+  dev: boolean;
+}
+
+const INSTALL_SUBCOMMANDS: Record<PackageManager | "yarn", string[]> = {
+  npm: ["install", "i", "add"],
+  pnpm: ["install", "i", "add"],
+  bun: ["install", "i", "add"],
+  yarn: ["add"],
+};
+
+const DEV_FLAGS = new Set(["-D", "--save-dev", "--dev", "-d"]);
+
+function splitPackageSpec(spec: string): [string, string] {
+  // `@scope/pkg@1.2.3` — the version separator is the last `@` after position 0.
+  const at = spec.lastIndexOf("@");
+  if (at <= 0) return [spec, "latest"];
+  return [spec.slice(0, at), spec.slice(at + 1) || "latest"];
+}
+
+/**
+ * Parses a single `npm i <pkg>`-style command. Returns null for anything that
+ * is not a package-manager install; `packages` is empty for a bare install.
+ */
+export function parseInstallCommand(command: string): InstallCommand | null {
+  const parts = command.trim().split(/\s+/).filter(Boolean);
+  if (parts[0] === "npx" && parts[1] === "pnpm") parts.shift();
+
+  const manager = parts[0] as keyof typeof INSTALL_SUBCOMMANDS;
+  const subcommands = INSTALL_SUBCOMMANDS[manager];
+  if (!subcommands || !subcommands.includes(parts[1])) return null;
+
+  const packages: Record<string, string> = {};
+  let dev = false;
+  for (const arg of parts.slice(2)) {
+    if (DEV_FLAGS.has(arg)) {
+      dev = true;
+      continue;
+    }
+    if (arg.startsWith("-")) continue;
+    // Local/git specs can't be expressed as a registry dependency; leave them alone.
+    if (/^(\.|\/|file:|git|https?:)/.test(arg)) return null;
+    const [name, version] = splitPackageSpec(arg);
+    packages[name] = version;
+  }
+
+  return { packages, dev };
+}
+
+function detectJsonIndent(source: string): string {
+  const match = source.match(/^(\s+)"/m);
+  return match ? match[1] : "  ";
+}
+
+/**
+ * Adds packages to a package.json source string the way `npm i` would, so a
+ * later plain install picks them up. Returns null when the manifest is not
+ * valid JSON, and the input unchanged when nothing new is declared.
+ */
+export function addDependenciesToManifest(
+  manifest: string,
+  install: InstallCommand,
+): string | null {
+  let pkg: Record<string, unknown>;
+  try {
+    pkg = JSON.parse(manifest) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (!pkg || typeof pkg !== "object" || Array.isArray(pkg)) return null;
+
+  const field = install.dev ? "devDependencies" : "dependencies";
+  const otherField = install.dev ? "dependencies" : "devDependencies";
+  const current = { ...((pkg[field] as Record<string, string> | undefined) ?? {}) };
+  const other = (pkg[otherField] as Record<string, string> | undefined) ?? {};
+
+  let changed = false;
+  for (const [name, version] of Object.entries(install.packages)) {
+    // Already declared (in either block) with a pinned range - keep the user's range.
+    if (name in current || name in other) continue;
+    current[name] = version;
+    changed = true;
+  }
+  if (!changed) return manifest;
+
+  pkg[field] = Object.fromEntries(
+    Object.entries(current).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return `${JSON.stringify(pkg, null, detectJsonIndent(manifest))}\n`;
 }

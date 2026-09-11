@@ -74,6 +74,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json(await readBackendResponse(response), { status: response.status });
   }
 
+  if (path === "verify-email") {
+    const query = new URL(request.url).searchParams.toString();
+    const response = await fetch(`${backendUrl(path)}${query ? `?${query}` : ""}`, {
+      cache: "no-store",
+    });
+    return NextResponse.json(await readBackendResponse(response), { status: response.status });
+  }
+
   return NextResponse.json({ error: "Not found" }, { status: 404 });
 }
 
@@ -94,7 +102,14 @@ export async function POST(request: Request, { params }: RouteContext) {
     return response;
   }
 
-  if (path !== "register" && path !== "login" && path !== "exchange") {
+  if (
+    path !== "register"
+    && path !== "login"
+    && path !== "exchange"
+    && path !== "forgot-password"
+    && path !== "resend-verification"
+    && path !== "reset-password"
+  ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -107,10 +122,14 @@ export async function POST(request: Request, { params }: RouteContext) {
   const payload = await readBackendResponse(response);
   if (!response.ok) return NextResponse.json(payload, { status: response.status });
 
-  const result = NextResponse.json(
-    payload.user ? { user: payload.user } : { ok: true },
-    { status: response.status },
-  );
+  const resultPayload = payload.user
+    ? { user: payload.user }
+    : {
+        ok: true,
+        ...(payload.verificationRequired === true ? { verificationRequired: true } : {}),
+        ...(typeof payload.message === "string" ? { message: payload.message } : {}),
+      };
+  const result = NextResponse.json(resultPayload, { status: response.status });
   if (typeof payload.token === "string") setSessionCookie(result, payload.token);
   return result;
 }

@@ -10,6 +10,10 @@ import {
 const scrypt = promisify(scryptCallback);
 const TOKEN_ISSUER = "orin";
 const PASSWORD_PREFIX = "scrypt";
+// Short-lived token handed to the browser so it can authenticate a WebSocket
+// upgrade to a different origin, where the httpOnly session cookie is not sent.
+const WS_TICKET_PURPOSE = "ws";
+export const WS_TICKET_TTL_SECONDS = 60;
 
 export { AUTH_COOKIE_NAME, AUTH_TOKEN_TTL_SECONDS, DEFAULT_JWT_SECRET };
 
@@ -35,7 +39,17 @@ export async function createToken(user: SessionUser, secret: string) {
     .sign(getSecret(secret));
 }
 
-export async function verifyToken(token: string, secret: string): Promise<SessionUser> {
+export async function createWsTicket(user: SessionUser, secret: string) {
+  return new SignJWT({ email: user.email, purpose: WS_TICKET_PURPOSE })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setIssuer(TOKEN_ISSUER)
+    .setSubject(user.id)
+    .setIssuedAt()
+    .setExpirationTime(`${WS_TICKET_TTL_SECONDS}s`)
+    .sign(getSecret(secret));
+}
+
+async function verifyJwt(token: string, secret: string) {
   const { payload } = await jwtVerify(token, getSecret(secret), {
     issuer: TOKEN_ISSUER,
   });
@@ -44,7 +58,19 @@ export async function verifyToken(token: string, secret: string): Promise<Sessio
     throw new Error("Invalid session token.");
   }
 
-  return { id: payload.sub, email: payload.email };
+  return { user: { id: payload.sub, email: payload.email }, purpose: payload.purpose };
+}
+
+export async function verifyToken(token: string, secret: string): Promise<SessionUser> {
+  const { user, purpose } = await verifyJwt(token, secret);
+  if (purpose !== undefined) throw new Error("Invalid session token.");
+  return user;
+}
+
+export async function verifyWsTicket(ticket: string, secret: string): Promise<SessionUser> {
+  const { user, purpose } = await verifyJwt(ticket, secret);
+  if (purpose !== WS_TICKET_PURPOSE) throw new Error("Invalid WebSocket ticket.");
+  return user;
 }
 
 export async function hashPassword(password: string) {

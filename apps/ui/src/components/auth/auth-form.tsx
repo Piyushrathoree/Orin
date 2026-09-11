@@ -18,6 +18,8 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [verificationRequired, setVerificationRequired] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -31,14 +33,27 @@ export default function AuthForm({ mode }: AuthFormProps) {
 
     setLoading(true);
     setError(null);
+    setNotice(null);
+    setVerificationRequired(false);
     try {
       const response = await fetch(`/api/auth/${isSignIn ? "login" : "register"}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Authentication failed");
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        verificationRequired?: boolean;
+      };
+      if (!response.ok) {
+        setVerificationRequired(payload.verificationRequired === true);
+        throw new Error(payload.error || "Authentication failed");
+      }
+      if (payload.verificationRequired) {
+        setNotice(payload.message || "Check your email to verify your account.");
+        return;
+      }
       const nextPath = new URLSearchParams(window.location.search).get("next");
       router.replace(nextPath?.startsWith("/") ? nextPath : "/main");
     } catch (caughtError) {
@@ -74,7 +89,22 @@ export default function AuthForm({ mode }: AuthFormProps) {
             required
           />
         </div>
+        {isSignIn && (
+          <div className="text-right text-sm">
+            <Link className="text-primary hover:underline" href="/forgot-password">
+              Forgot password?
+            </Link>
+          </div>
+        )}
+        {notice && <p className="text-sm text-primary">{notice}</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
+        {verificationRequired && (
+          <p className="text-sm text-muted-foreground">
+            <Link className="text-primary hover:underline" href="/resend-verification">
+              Resend verification email
+            </Link>
+          </p>
+        )}
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Please wait..." : isSignIn ? "Sign in" : "Create account"}
         </Button>

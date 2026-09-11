@@ -10,81 +10,13 @@ import { ArrowLeft, Check, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-
-type ProviderKey = "OPENAI" | "ANTHROPIC" | "GEMINI" | "GROQ" | "OPENROUTER" | "LOCAL";
-
-type ProviderState = {
-  provider: ProviderKey;
-  configured: boolean;
-  keyHint: string | null;
-  baseUrl: string | null;
-  model: string | null;
-  isDefault: boolean;
-};
-
-type ProviderMeta = {
-  label: string;
-  description: string;
-  needsKey: boolean;
-  keyRequired: boolean;
-  modelRequired: boolean;
-  modelPlaceholder: string;
-  baseUrlPlaceholder?: string;
-};
-
-const PROVIDER_META: Record<ProviderKey, ProviderMeta> = {
-  OPENAI: {
-    label: "OpenAI",
-    description: "GPT models via api.openai.com.",
-    needsKey: true,
-    keyRequired: true,
-    modelRequired: false,
-    modelPlaceholder: "gpt-4o-mini",
-  },
-  ANTHROPIC: {
-    label: "Anthropic (Claude)",
-    description: "Claude models via the Anthropic API.",
-    needsKey: true,
-    keyRequired: true,
-    modelRequired: false,
-    modelPlaceholder: "claude-opus-5",
-  },
-  GEMINI: {
-    label: "Google Gemini",
-    description: "Gemini models via Google's Generative Language API.",
-    needsKey: true,
-    keyRequired: true,
-    modelRequired: false,
-    modelPlaceholder: "gemini-2.5-flash",
-  },
-  GROQ: {
-    label: "Groq",
-    description: "Fast open-weight models hosted on Groq.",
-    needsKey: true,
-    keyRequired: true,
-    modelRequired: false,
-    modelPlaceholder: "llama-3.3-70b-versatile",
-  },
-  OPENROUTER: {
-    label: "OpenRouter",
-    description: "Route to any model OpenRouter supports.",
-    needsKey: true,
-    keyRequired: true,
-    modelRequired: true,
-    modelPlaceholder: "openai/gpt-4o-mini",
-  },
-  LOCAL: {
-    label: "Local LLM",
-    description: "Point at your own OpenAI-compatible server (e.g. Ollama).",
-    needsKey: false,
-    keyRequired: false,
-    modelRequired: false,
-    modelPlaceholder: "qwen3:8b",
-    baseUrlPlaceholder: "http://127.0.0.1:11434/v1",
-  },
-};
-
-const PROVIDER_ORDER: ProviderKey[] = ["OPENAI", "ANTHROPIC", "GEMINI", "GROQ", "OPENROUTER", "LOCAL"];
+import {
+  fetchProviderSettings,
+  PROVIDER_META,
+  PROVIDER_ORDER,
+  type ProviderKey,
+  type ProviderState,
+} from "@/lib/ai-providers";
 
 type DraftState = { apiKey: string; baseUrl: string; model: string };
 
@@ -103,10 +35,7 @@ export default function SettingsPage() {
 
   const loadProviders = async () => {
     try {
-      const response = await fetch("/api/orin/settings/providers", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Could not load provider settings");
-      setProviders(data.providers as ProviderState[]);
+      setProviders(await fetchProviderSettings());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load provider settings");
     }
@@ -274,7 +203,7 @@ export default function SettingsPage() {
                     </Label>
                     <Input
                       id={`${row.provider}-model`}
-                      placeholder={row.model || meta.modelPlaceholder}
+                      placeholder={row.model || row.defaultModel || meta.modelPlaceholder}
                       value={draft.model}
                       onChange={(event) => updateDraft(row.provider, { model: event.target.value })}
                     />

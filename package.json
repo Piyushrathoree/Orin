@@ -4,7 +4,7 @@
   "scripts": {
     "build": "bun run --cwd apps/ui build",
     "db:generate": "bun run --cwd packages/db generate",
-    "dev": "turbo run dev --filter=ui",
+    "dev": "bun run db:generate && turbo run dev",
     "lint": "bun run --cwd apps/ui lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "bun run --cwd apps/ui check-types",
@@ -12,7 +12,7 @@
     "build:all": "bun run build:orin && bun run --cwd apps/ws build",
     "dev:orin": "turbo run dev --filter=ui",
     "dev:orin-backend": "bun run --cwd apps/orin-backend dev",
-    "dev:all": "bun run db:generate && turbo run dev --parallel",
+    "dev:all": "bun run dev",
     "lint:orin": "bun run --cwd apps/ui lint",
     "lint:all": "bun run lint:orin && bun run --cwd apps/ws lint",
     "check-types:orin": "bun run db:generate && bun run --cwd apps/ui check-types && bun run --cwd apps/orin-backend typecheck",

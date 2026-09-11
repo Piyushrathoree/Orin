@@ -62,6 +62,7 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
     peerMessages,
     totalUserCount,
     peerConnected,
+    isCollaborationAvailable,
     isAudioEnabled,
     isVideoEnabled,
     isInCall,
@@ -173,6 +174,24 @@ const PeerChat = ({ projectId, roomConnection }: PeerChatProps) => {
     remoteStream && remoteStream.getTracks().length > 0;
   const hasLocalStream =
     localStream && localStream.getTracks().length > 0;
+
+  if (!isCollaborationAvailable) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <div className="flex size-10 items-center justify-center rounded-full bg-muted">
+          <WifiOff className="size-5 text-muted-foreground" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">
+            Peer collaboration is unavailable
+          </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            This deployment does not include the real-time collaboration service.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden">

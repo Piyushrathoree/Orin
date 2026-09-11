@@ -20,3 +20,20 @@ describe("shared authentication", () => {
     await expect(verifyToken(token, "different-secret-that-is-long-enough")).rejects.toThrow();
   });
 });
+
+describe("websocket tickets", () => {
+  test("tickets verify as tickets, not as sessions", async () => {
+    const { createWsTicket, verifyWsTicket } = await import("@orin/auth");
+    const ticket = await createWsTicket(user, secret);
+
+    expect(await verifyWsTicket(ticket, secret)).toEqual(user);
+    await expect(verifyToken(ticket, secret)).rejects.toThrow();
+  });
+
+  test("session tokens are not accepted as tickets", async () => {
+    const { verifyWsTicket } = await import("@orin/auth");
+    const token = await createToken(user, secret);
+
+    await expect(verifyWsTicket(token, secret)).rejects.toThrow();
+  });
+});
