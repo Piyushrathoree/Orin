@@ -30,7 +30,16 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   const path = (await params).path.join("/");
 
   if (path === "google" || path === "github") {
-    return NextResponse.redirect(backendUrl(path));
+    // Resolve the provider redirect server-side so the browser never needs to
+    // reach ORIN_BACKEND_URL directly (it may be an internal address).
+    const response = await fetch(backendUrl(path), { redirect: "manual", cache: "no-store" });
+    const location = response.headers.get("location");
+    if (response.status >= 300 && response.status < 400 && location) {
+      return NextResponse.redirect(location);
+    }
+    const signInUrl = new URL("/sign-in", request.url);
+    signInUrl.searchParams.set("error", "OAuth is not configured");
+    return NextResponse.redirect(signInUrl);
   }
 
   if (path === "callback") {

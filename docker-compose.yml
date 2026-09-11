@@ -1,0 +1,97 @@
+# Whole stack in one command:
+#   bun run docker:up        # build + run (foreground)
+#   bun run docker:down      # stop and remove
+#
+# Env comes from the same per-app files used for local dev:
+#   apps/orin-backend/.env   DATABASE_URL, JWT_SECRET, SECRETS_ENCRYPTION_KEY, OAuth, SMTP
+#   apps/ws/.env             JWT_SECRET (must equal the API's)
+#   packages/db/.env         DATABASE_URL / DIRECT_URL for the migrate step
+# The database stays on Neon (@prisma/adapter-neon needs Neon's protocol).
+#
+# Host ports match local dev (ui 3001, api 3030, ws 8080) so the localhost URLs
+# in the .env files work unchanged in the browser. Override just the host side
+# if something else holds a port: UI_HOST_PORT=3101 bun run docker:up
+
+services:
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/orin-backend/Dockerfile
+      network: host
+    env_file:
+      - path: packages/db/.env
+        required: false
+      - path: apps/orin-backend/.env
+        required: false
+    working_dir: /app
+    command: ["bun", "run", "--cwd", "packages/db", "migrate:deploy"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/orin-backend/Dockerfile
+      network: host
+    env_file:
+      - path: packages/db/.env
+        required: false
+      - path: apps/orin-backend/.env
+        required: false
+    environment:
+      # `environment` wins over env_file: force production and the container port.
+      NODE_ENV: production
+      PORT: "3030"
+      # Browser-facing: OAuth callback + email links point at the published host ports.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3001}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:3030}
+    ports:
+      - "${API_HOST_PORT:-3030}:3030"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3030/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  ws:
+    build:
+      context: .
+      dockerfile: apps/ws/Dockerfile
+      network: host
+    env_file:
+      - path: apps/ws/.env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      # Server-to-server: reach the API over the compose network.
+      BACKEND_URL: http://api:3030
+    ports:
+      - "${WS_HOST_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: apps/ui/Dockerfile
+      network: host
+      args:
+        # Browser-facing WebSocket URL, baked in at build time.
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8080}
+    environment:
+      PORT: "3001"
+      # Server-side only (Next route handlers proxy to the API).
+      ORIN_BACKEND_URL: http://api:3030
+    ports:
+      - "${UI_HOST_PORT:-3001}:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped

@@ -11,7 +11,7 @@ COPY apps/ui/package.json apps/ui/
 COPY packages/auth/package.json packages/auth/
 COPY packages/db/package.json packages/db/
 COPY packages/eslint-config/package.json packages/eslint-config/
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked bun install --frozen-lockfile
 
 COPY packages/auth packages/auth
 COPY packages/db packages/db

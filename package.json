@@ -17,7 +17,11 @@
     "lint:all": "bun run lint:orin && bun run --cwd apps/ws lint",
     "check-types:orin": "bun run db:generate && bun run --cwd apps/ui check-types && bun run --cwd apps/orin-backend typecheck",
     "check-types:all": "bun run check-types:orin && bun run --cwd packages/auth typecheck && bun run --cwd apps/ws typecheck",
-    "test": "bun test --pass-with-no-tests"
+    "test": "bun test --pass-with-no-tests",
+    "docker:up": "docker compose up --build",
+    "docker:up:detached": "docker compose up --build -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
