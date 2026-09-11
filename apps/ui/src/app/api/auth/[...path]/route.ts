@@ -58,7 +58,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       return NextResponse.redirect(signInUrl);
     }
 
-    const redirect = NextResponse.redirect(new URL("/main", request.url));
+    const destination = payload.isNewUser === true ? "/main/settings" : "/main";
+    const redirect = NextResponse.redirect(new URL(destination, request.url));
     setSessionCookie(redirect, payload.token);
     return redirect;
   }
@@ -123,7 +124,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   if (!response.ok) return NextResponse.json(payload, { status: response.status });
 
   const resultPayload = payload.user
-    ? { user: payload.user }
+    ? { user: payload.user, ...(payload.isNewUser === true ? { isNewUser: true } : {}) }
     : {
         ok: true,
         ...(payload.verificationRequired === true ? { verificationRequired: true } : {}),

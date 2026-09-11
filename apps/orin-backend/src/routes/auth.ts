@@ -17,7 +17,7 @@ const OAUTH_CODE_TTL_MS = 60 * 1000;
 
 type OAuthProvider = "google" | "github";
 type OAuthState = { provider: OAuthProvider; expiresAt: number };
-type OAuthCode = { token: string; expiresAt: number };
+type OAuthCode = { token: string; isNewUser: boolean; expiresAt: number };
 
 const oauthStates = new Map<string, OAuthState>();
 const oauthCodes = new Map<string, OAuthCode>();
@@ -41,10 +41,11 @@ function sessionUser(user: { id: string; email: string }) {
 async function respondWithSession(
   res: ExpressResponse,
   user: { id: string; email: string },
+  extra: Record<string, unknown> = {},
 ) {
   const currentUser = sessionUser(user);
   const token = await createToken(currentUser, config.jwtSecret);
-  res.json({ token, user: currentUser });
+  res.json({ token, user: currentUser, ...extra });
 }
 
 function oauthConfig(provider: OAuthProvider) {
@@ -91,10 +92,10 @@ function consumeState(value: string, provider: OAuthProvider) {
   return state?.provider === provider && state.expiresAt > Date.now();
 }
 
-function storeOAuthToken(token: string) {
+function storeOAuthToken(token: string, isNewUser: boolean) {
   removeExpiredEntries();
   const code = randomBytes(24).toString("hex");
-  oauthCodes.set(code, { token, expiresAt: Date.now() + OAUTH_CODE_TTL_MS });
+  oauthCodes.set(code, { token, isNewUser, expiresAt: Date.now() + OAUTH_CODE_TTL_MS });
   return code;
 }
 
@@ -216,28 +217,30 @@ async function findOrCreateOAuthUser(
     where: { provider_providerAccountId: { provider, providerAccountId } },
     include: { user: true },
   });
-  if (account) return account.user;
+  if (account) return { user: account.user, isNewUser: false };
 
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     await prisma.oAuthAccount.create({
       data: { provider, providerAccountId, userId: existingUser.id },
     });
-    return existingUser.emailVerifiedAt
+    const user = existingUser.emailVerifiedAt
       ? existingUser
-      : prisma.user.update({
+      : await prisma.user.update({
           where: { id: existingUser.id },
           data: { emailVerifiedAt: new Date() },
         });
+    return { user, isNewUser: false };
   }
 
-  return prisma.user.create({
+  const user = await prisma.user.create({
     data: {
       email,
       emailVerifiedAt: new Date(),
       oauthAccounts: { create: { provider, providerAccountId } },
     },
   });
+  return { user, isNewUser: true };
 }
 
 router.post("/register", async (req, res) => {
@@ -255,17 +258,12 @@ router.post("/register", async (req, res) => {
       return;
     }
     const user = await prisma.user.create({
-      data: { email, passwordHash: await hashPassword(password) },
+      data: { email, passwordHash: await hashPassword(password), emailVerifiedAt: new Date() },
     });
-    const verificationToken = await issueAuthToken(user.id, AuthTokenType.EMAIL_VERIFICATION);
-    await sendVerificationEmail(user.email, verificationToken);
-    res.status(201).json({
-      verificationRequired: true,
-      message: "Account created. Check your email to verify your account before signing in.",
-    });
+    await respondWithSession(res, user, { isNewUser: true });
   } catch (error) {
     console.error("[Orin API] Registration failed:", error);
-    res.status(500).json({ error: "Could not create account or send verification email" });
+    res.status(500).json({ error: "Could not create account" });
   }
 });
 
@@ -281,13 +279,6 @@ router.post("/login", async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
       res.status(401).json({ error: "Invalid email or password" });
-      return;
-    }
-    if (!user.emailVerifiedAt) {
-      res.status(403).json({
-        error: "Please verify your email before signing in",
-        verificationRequired: true,
-      });
       return;
     }
     await respondWithSession(res, user);
@@ -426,7 +417,7 @@ router.post("/exchange", (req, res) => {
     res.status(400).json({ error: "OAuth callback has expired" });
     return;
   }
-  res.json({ token: entry.token });
+  res.json({ token: entry.token, isNewUser: entry.isNewUser });
 });
 
 for (const provider of ["google", "github"] as const) {
@@ -450,9 +441,9 @@ for (const provider of ["google", "github"] as const) {
       const profile = provider === "google"
         ? await exchangeGoogleCode(code)
         : await exchangeGithubCode(code);
-      const user = await findOrCreateOAuthUser(provider, profile.providerAccountId, profile.email);
+      const { user, isNewUser } = await findOrCreateOAuthUser(provider, profile.providerAccountId, profile.email);
       const token = await createToken(sessionUser(user), config.jwtSecret);
-      frontendCallback(res, { code: storeOAuthToken(token) });
+      frontendCallback(res, { code: storeOAuthToken(token, isNewUser) });
     } catch (error) {
       console.error(`[Orin API] ${provider} OAuth failed:`, error);
       frontendCallback(res, { error: "OAuth sign-in failed" });

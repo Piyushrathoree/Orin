@@ -25,8 +25,8 @@ const smtpConfigured = Boolean(
 );
 
 if (nodeEnv === 'production' && !smtpConfigured) {
-  throw new Error(
-    'SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM are required in production for auth emails.',
+  console.warn(
+    '[Orin API] SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_FROM are not set; password reset emails will fail.',
   );
 }
 

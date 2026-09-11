@@ -45,6 +45,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         error?: string;
         message?: string;
         verificationRequired?: boolean;
+        isNewUser?: boolean;
       };
       if (!response.ok) {
         setVerificationRequired(payload.verificationRequired === true);
@@ -52,6 +53,10 @@ export default function AuthForm({ mode }: AuthFormProps) {
       }
       if (payload.verificationRequired) {
         setNotice(payload.message || "Check your email to verify your account.");
+        return;
+      }
+      if (payload.isNewUser) {
+        router.replace("/main/settings");
         return;
       }
       const nextPath = new URLSearchParams(window.location.search).get("next");
