@@ -177,7 +177,7 @@ export default function SecureAccess() {
       ref={rootRef}
       className="relative h-full w-full overflow-hidden"
       role="img"
-      aria-label="Layered security shield with a private particle field"
+      aria-label="AI provider connection protected inside the workspace"
     >
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(transparent_20%,var(--card)_72%)]" />

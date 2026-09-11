@@ -8,7 +8,7 @@ import SecureAccess from "./bento/secure-access"
 import OneFlowProcess from "./bento/one-flow-process"
 import PickYourTool from "./bento/pick-your-tool"
 import BuildPrompt from "./bento/build-prompt"
-import VoiceAssistant from "./bento/voice-assistant"
+import WorkspacePanel from "./bento/voice-assistant"
 
 type BentoCardProps = {
   title: string
@@ -64,32 +64,32 @@ export function BentoSection() {
   const reduce = useReducedMotion()
   const cards: BentoCardProps[] = [
     {
-      title: "Secure access",
-      description: "Your information stays encrypted and private, ensuring complete safety while using our AI platform.",
+      title: "Connect your AI provider",
+      description: "Choose OpenAI, Anthropic, Gemini, Groq, OpenRouter, or a local LLM in Settings.",
       Component: SecureAccess,
     },
     {
-      title: "One-flow process",
-      description: "Conduct deep research seamlessly in a single process, reducing complexity and saving valuable time.",
+      title: "Generate the project",
+      description: "Orin turns your prompt into a React + Vite project and writes the files into a new workspace.",
       Component: OneFlowProcess,
     },
     {
-      title: "Pick your tool",
-      description: "Select from a range of leading AI tools and customize your workspace the way you prefer.",
+      title: "Shape it in the workspace",
+      description: "Ask for a UI change, Orin writes the file, and the live preview updates without leaving the editor.",
       Component: PickYourTool,
       className: "max-lg:order-1",
     },
     {
-      title: "Build things with simple prompt",
-      description: "Turn simple text prompts into powerful outputs, from design to analysis, without extra effort.",
+      title: "Describe the change",
+      description: "Ask for a new screen, a bug fix, or a focused code change in plain language.",
       Component: BuildPrompt,
       className: "sm:col-span-2",
       visualClassName: "min-h-60 sm:h-72",
     },
     {
-      title: "Voice assistant",
-      description: "Ask, command, and get instant responses.",
-      Component: VoiceAssistant,
+      title: "See the result live",
+      description: "Run the project in your browser and switch between code and a responsive preview as you iterate.",
+      Component: WorkspacePanel,
       className: "max-lg:order-1",
     },
   ]
@@ -101,11 +101,10 @@ export function BentoSection() {
         <div className="self-stretch py-8 md:py-14 flex flex-col justify-center items-center gap-2 z-10">
           <div className="flex flex-col justify-start items-center gap-4">
             <h2 className="w-full max-w-[655px] text-center text-foreground text-4xl md:text-6xl font-semibold leading-tight md:leading-[66px]">
-              Empower Your Workflow with AI
+              One workspace for the full build loop
             </h2>
             <p className="w-full max-w-[600px] text-center text-muted-foreground text-lg md:text-xl font-medium leading-relaxed">
-              Ask your AI Agent for real-time collaboration, seamless integrations, and actionable insights to
-              streamline your operations.
+              Start with a prompt, edit the generated React app, run it in the browser, and share or export the result.
             </p>
           </div>
         </div>

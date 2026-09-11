@@ -1,8 +1,10 @@
 "use client";
 
-import Logo from "@/components/mine/logo";
+import { AppPageShell } from "@/components/mine/app-page-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +45,17 @@ import {
   saveProjectPrompt,
   takePendingPrompt,
 } from "@/lib/initial-prompt";
-import { ArrowUpRight, FolderDown, FolderOpen, LogOut, Settings, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  FolderPlus,
+  LogOut,
+  MessageSquarePlus,
+  Settings,
+  Trash2,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -56,18 +68,25 @@ type LocalProject = {
 
 const PROJECTS_STORAGE_KEY = "orin:projects";
 
-const projectTypes = [
+const projectTypes: {
+  icon: LucideIcon;
+  name: string;
+  description: string;
+}[] = [
   {
-    icon: <FolderOpen size={16} />,
+    icon: FolderPlus,
     name: "Start new Project",
+    description: "Start with a React (Vite) app",
   },
   {
-    icon: <FolderDown size={16} />,
+    icon: MessageSquarePlus,
     name: "Create With Prompt",
+    description: "Generate an app from a prompt",
   },
   {
-    icon: <FolderDown size={16} />,
+    icon: Users,
     name: "Collab with friends",
+    description: "Coming soon",
   },
 ];
 
@@ -157,6 +176,7 @@ function projectNameFromPrompt(prompt: string): string {
 
 const Page = () => {
   const [projects, setProjects] = useState<LocalProject[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPromptDialogOpen, setIsPromptDialogOpen] = useState(false);
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
@@ -170,7 +190,8 @@ const Page = () => {
     // Read browser storage after hydration so the server and client render match.
     void loadRemoteProjects()
       .then((remoteProjects) => setProjects(remoteProjects.length > 0 ? remoteProjects : readProjects()))
-      .catch(() => setProjects(readProjects()));
+      .catch(() => setProjects(readProjects()))
+      .finally(() => setProjectsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -288,61 +309,60 @@ const Page = () => {
   const visibleProjects = projects.slice(0, 5);
 
   return (
-    <div className="relative flex min-h-screen w-full justify-center bg-background px-6 py-10 sm:px-10">
-      <div className="flex w-full max-w-5xl flex-col items-start justify-center">
-        <div className="flex w-full items-start justify-between gap-6">
-          <div>
-            <Logo />
-            <p className="mt-4 text-sm text-muted-foreground">
-              Build, preview, and collaborate from one focused workspace.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Link href="/main/settings">
-              <Button variant="outline" size="sm">
-                <Settings className="size-3.5" />
-                Settings
-              </Button>
-            </Link>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="size-3.5" />
-              Sign out
-            </Button>
-            <Link
-              href="/"
-              className="hidden rounded-full border border-border px-4 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary sm:inline-flex"
-            >
+    <AppPageShell
+      actions={
+        <>
+          <ThemeToggle />
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/">
+              <ArrowLeft className="size-3.5" />
               Back to landing
             </Link>
-          </div>
-        </div>
+          </Button>
+          <Link href="/main/settings">
+            <Button variant="outline" size="sm">
+              <Settings className="size-3.5" />
+              Settings
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" onClick={handleLogout}>
+            <LogOut className="size-3.5" />
+            Sign out
+          </Button>
+        </>
+      }
+    >
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Projects</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Build, preview, and collaborate from one focused workspace.
+        </p>
+      </div>
 
         <div className="mt-8 grid w-full grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           {projectTypes.map((item, index) => {
             const isCollabCard = index === 2;
             const disabled = isAtProjectLimit || isCollabCard;
-            const description =
-              index === 0
-                ? "Start with a React (Vite) app"
-                : index === 1
-                  ? "Generate an app from a prompt"
-                  : "Coming soon";
+            const Icon = item.icon;
             const card = (
-              <div
-                className={
-                  "group flex w-full flex-col rounded-xl border border-border bg-card/60 p-4 transition-all duration-150" +
-                  (disabled
-                    ? " cursor-not-allowed opacity-60"
-                    : " cursor-pointer hover:border-primary/40 hover:bg-primary/5")
-                }
+              <button
+                type="button"
+                disabled={disabled}
+                className={cn(
+                  "flex w-full items-start gap-3 rounded-xl border border-border bg-card/60 p-4 text-left transition-colors duration-150",
+                  disabled
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer hover:border-primary/40 hover:bg-primary/5",
+                )}
               >
-                {item.icon}
-                <span className="mt-3 text-sm font-medium">{item.name}</span>
-                <span className="mt-1 text-xs text-muted-foreground">
-                  {description}
+                <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{item.name}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {item.description}
+                  </span>
                 </span>
-              </div>
+              </button>
             );
 
             if (index === 0) {
@@ -457,68 +477,92 @@ const Page = () => {
             </p>
           </div>
           <div className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
-            {projectCount} total
+            {projectsLoading ? "…" : `${projectCount} total`}
           </div>
         </div>
 
-        <div className="mt-4 w-full space-y-2">
-          {visibleProjects.map((project) => (
-            <div
-              key={project.id}
-              className="flex w-full items-center justify-between gap-4 rounded-xl border border-border bg-card/40 px-4 py-3 transition-colors hover:border-primary/30 hover:bg-primary/5"
-            >
-              <div className="mr-4 flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-sm font-medium">
-                  {project.name}
-                </span>
-                <div className="text-xs text-muted-foreground">
-                  Created At: {formatCreationTime(project.createdAt)}
+        <div
+          className="mt-4 grid w-full gap-2"
+          aria-busy={projectsLoading}
+          aria-live="polite"
+        >
+          {projectsLoading ? (
+            Array.from({ length: 4 }, (_, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3.5"
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-44" />
+                  <Skeleton className="h-3 w-36" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-16 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
                 </div>
               </div>
-              <div className="flex gap-2">
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      size="icon"
-                      className="aspect-square cursor-pointer bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      <Trash2 />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete project</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete &quot;{project.name}&quot; and
-                        its files.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        variant="destructive"
-                        onClick={() => handleDeleteProject(project.id)}
-                        disabled={deletingProjectId === project.id}
-                      >
-                        {deletingProjectId === project.id
-                          ? "Deleting..."
-                          : "Delete"}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-                <Link href={`/room/${project.id}`}>
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className="aspect-square cursor-pointer px-3 text-sm font-medium hover:bg-primary/10 hover:text-primary"
-                  >
-                    <ArrowUpRight />
-                  </Button>
-                </Link>
-              </div>
+            ))
+          ) : visibleProjects.length === 0 ? (
+            <div className="flex h-28 items-center rounded-xl border border-dashed border-border px-4 text-sm text-muted-foreground">
+              No projects yet. Start a new one above.
             </div>
-          ))}
+          ) : (
+            visibleProjects.map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-sm">{project.name}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatCreationTime(project.createdAt)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Button size="sm" asChild>
+                    <Link href={`/room/${project.id}`}>
+                      Open
+                      <ArrowUpRight className="size-3.5" />
+                    </Link>
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`Delete ${project.name}`}
+                        className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete project</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete &quot;{project.name}&quot; and
+                          its files.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          onClick={() => handleDeleteProject(project.id)}
+                          disabled={deletingProjectId === project.id}
+                        >
+                          {deletingProjectId === project.id
+                            ? "Deleting..."
+                            : "Delete"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {projectCount > 5 && (
@@ -527,8 +571,7 @@ const Page = () => {
             one.
           </p>
         )}
-      </div>
-    </div>
+    </AppPageShell>
   );
 };
 

@@ -11,10 +11,10 @@ import { Textarea } from "@/components/ui/textarea"
 gsap.registerPlugin(useGSAP)
 
 const PLACEHOLDERS = [
-  "What can I do for you?",
-  "Build a pricing page with three tiers…",
-  "Review this React component for a11y…",
-  "Scaffold a tRPC router for rooms…",
+  "Describe a web app to build…",
+  "Create a project dashboard with a sidebar…",
+  "Add a responsive pricing page with three tiers…",
+  "Fix the empty state in the projects list…",
 ]
 
 export default function BuildPrompt() {

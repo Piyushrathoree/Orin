@@ -9,12 +9,12 @@ import { cn } from "@/lib/utils"
 gsap.registerPlugin(useGSAP)
 
 const STEPS = [
-  "Analyzing search results...",
-  "Generating summary...",
-  "Checking for relevant information...",
-  "Finalizing analysis...",
-  "Setting up lazy loading...",
-  "Streaming structured output...",
+  "Reading your prompt...",
+  "Creating the project...",
+  "Writing project files...",
+  "Starting the preview...",
+  "Syncing editor changes...",
+  "Ready to iterate...",
 ]
 
 const STATIC_STEPS = STEPS.slice(0, 4)
@@ -116,38 +116,40 @@ export default function OneFlowProcess() {
   return (
     <div
       ref={rootRef}
-      className="flex h-full flex-col px-4 pt-7"
+      className="flex h-full flex-col px-4 py-5"
       role="img"
-      aria-label="A single research flow stepping through analysis in sequence"
+      aria-label="Project generation flow stepping through a new workspace"
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}
     >
-      <div className="text-muted-foreground flex shrink-0 items-center gap-2 px-1 pb-3 font-medium">
-        <motion.span
-          className="border-muted-foreground/25 border-t-muted-foreground size-4 shrink-0 rounded-full border-2"
-          animate={reduce ? undefined : { rotate: 360 }}
-          transition={{ duration: 1.15, repeat: Infinity, ease: "linear" }}
-          aria-hidden="true"
-        />
-        <span className="text-sm">Analyzing results...</span>
-      </div>
-
-      <div ref={clipRef} className="relative min-h-0 flex-1 overflow-hidden rounded-t-xl">
-        <div className="bg-muted h-full overflow-hidden px-3 py-3">
-          <div ref={listRef} className="flex flex-col gap-2 will-change-transform">
-            {rows.map((step, index) => (
-              <StepRow
-                key={`${step}-${index}`}
-                step={step}
-                index={index}
-                active={Boolean(reduce && index === 1)}
-                dim={Boolean(reduce && index !== 1)}
-              />
-            ))}
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-lg">
+        <div className="text-muted-foreground flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5 font-medium">
+          <motion.span
+            className="border-muted-foreground/25 border-t-muted-foreground size-4 shrink-0 rounded-full border-2"
+            animate={reduce ? undefined : { rotate: 360 }}
+            transition={{ duration: 1.15, repeat: Infinity, ease: "linear" }}
+            aria-hidden="true"
+          />
+          <span className="text-sm">Generating your project...</span>
         </div>
-        <div className="from-muted pointer-events-none absolute inset-x-0 top-0 h-10 bg-linear-to-b to-transparent" />
-        <div className="from-muted pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-linear-to-t to-transparent" />
+
+        <div ref={clipRef} className="relative min-h-0 flex-1 overflow-hidden">
+          <div className="bg-muted h-full overflow-hidden px-3 py-3">
+            <div ref={listRef} className="flex flex-col gap-2 will-change-transform">
+              {rows.map((step, index) => (
+                <StepRow
+                  key={`${step}-${index}`}
+                  step={step}
+                  index={index}
+                  active={Boolean(reduce && index === 1)}
+                  dim={Boolean(reduce && index !== 1)}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="from-muted pointer-events-none absolute inset-x-0 top-0 h-10 bg-linear-to-b to-transparent" />
+          <div className="from-muted pointer-events-none absolute inset-x-0 bottom-0 h-7 bg-linear-to-t to-transparent" />
+        </div>
       </div>
     </div>
   )

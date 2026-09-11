@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Orin",
-  description: "Orin – Collaborative Coding Platform",
+  description: "Orin – AI coding workspace for building React apps in the browser.",
   icons: {
     icon: [{ url: "/Orin-logo.svg", type: "image/svg+xml" }],
     shortcut: "/Orin-logo.svg",
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Orin",
-    description: "Orin – Collaborative Coding Platform",
+    description: "Orin – AI coding workspace for building React apps in the browser.",
     images: [
       {
         url: "https://res.cloudinary.com/dz12pywzs/image/upload/v1770130073/Copy_of_Webinar_Keynote_Presentation_1_g0bs5i.png",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Orin",
-    description: "Orin – Collaborative Coding Platform",
+    description: "Orin – AI coding workspace for building React apps in the browser.",
     images: [
       "https://res.cloudinary.com/dz12pywzs/image/upload/v1770130073/Copy_of_Webinar_Keynote_Presentation_1_g0bs5i.png",
     ],
@@ -62,13 +62,13 @@ export default function RootLayout({
         <meta property="og:title" content="Orin" />
         <meta
           property="og:description"
-          content="Orin – Collaborative Coding Platform"
+          content="Orin – AI coding workspace for building React apps in the browser."
         />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Orin" />
         <meta
           name="twitter:description"
-          content="Orin – Collaborative Coding Platform"
+          content="Orin – AI coding workspace for building React apps in the browser."
         />
         <meta
           name="twitter:image"

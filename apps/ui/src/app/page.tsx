@@ -6,7 +6,7 @@ import { FAQSection } from "@/components/landing-latest/faq-section";
 import { FooterSection } from "@/components/landing-latest/footer-section";
 import { HeroSection } from "@/components/landing-latest/hero-section";
 import { SocialProof } from "@/components/landing-latest/social-proof";
-import { TestimonialGridSection } from "@/components/landing-latest/testimonial-grid-section";
+import { WorkflowGridSection } from "@/components/landing-latest/testimonial-grid-section";
 
 const Page = () => {
   return (
@@ -22,7 +22,7 @@ const Page = () => {
         </main>
 
         <AnimatedSection
-          className="relative z-10 mx-auto mt-[480px] max-w-[1320px] px-6 md:mt-[460px]"
+          className="relative z-10 mx-auto mt-[560px] max-w-[1320px] px-6 md:mt-[640px]"
           delay={0.1}
         >
           <SocialProof />
@@ -35,11 +35,11 @@ const Page = () => {
           <BentoSection />
         </AnimatedSection>
         <AnimatedSection
-          id="testimonials-section"
+          id="workflow-section"
           className="relative z-10 mx-auto mt-8 max-w-[1320px] md:mt-16"
           delay={0.2}
         >
-          <TestimonialGridSection />
+          <WorkflowGridSection />
         </AnimatedSection>
         <AnimatedSection
           id="faq-section"

@@ -1,11 +1,12 @@
 "use client";
 
-import Logo from "@/components/mine/logo";
+import { AppPageShell } from "@/components/mine/app-page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ArrowLeft, Check, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -26,6 +27,7 @@ function emptyDraft(): DraftState {
 
 export default function SettingsPage() {
   const [providers, setProviders] = useState<ProviderState[] | null>(null);
+  const [providersFailed, setProvidersFailed] = useState(false);
   const [drafts, setDrafts] = useState<Record<ProviderKey, DraftState>>(() => {
     const initial = {} as Record<ProviderKey, DraftState>;
     for (const provider of PROVIDER_ORDER) initial[provider] = emptyDraft();
@@ -35,8 +37,10 @@ export default function SettingsPage() {
 
   const loadProviders = async () => {
     try {
+      setProvidersFailed(false);
       setProviders(await fetchProviderSettings());
     } catch (error) {
+      setProvidersFailed(true);
       toast.error(error instanceof Error ? error.message : "Could not load provider settings");
     }
   };
@@ -107,26 +111,47 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen w-full justify-center bg-background px-6 py-10 sm:px-10">
-      <div className="flex w-full max-w-3xl flex-col items-start justify-center">
-        <div className="flex w-full items-center justify-between gap-6">
-          <div>
-            <Logo />
-            <p className="mt-4 text-sm text-muted-foreground">
-              Add your own API keys, or point at a local model. Your keys are encrypted at rest and only used for
-              your own requests.
-            </p>
-          </div>
+    <AppPageShell
+      actions={
+        <Button variant="outline" size="sm" asChild>
           <Link href="/main">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="size-3.5" />
-              Back to dashboard
-            </Button>
+            <ArrowLeft className="size-3.5" />
+            Back to dashboard
           </Link>
-        </div>
+        </Button>
+      }
+    >
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Providers</h1>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          Add your own API keys, or point at a local model. Your keys are encrypted at rest and only used for
+          your own requests.
+        </p>
+      </div>
 
-        <div className="mt-8 flex w-full flex-col gap-4">
-          {providers === null && <p className="text-sm text-muted-foreground">Loading providers…</p>}
+        <div className="mt-8 flex w-full flex-col gap-4" aria-busy={providers === null && !providersFailed} aria-live="polite">
+          {providersFailed && providers === null && (
+            <p className="text-sm text-muted-foreground">Could not load providers. Refresh to try again.</p>
+          )}
+
+          {providers === null && !providersFailed &&
+            PROVIDER_ORDER.map((provider) => (
+              <Card key={provider}>
+                <CardHeader className="flex flex-row items-start justify-between gap-4">
+                  <div className="flex w-full flex-col gap-2">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-4 w-full max-w-sm" />
+                  </div>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-3">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-9 w-full" />
+                  <Skeleton className="mt-1 h-8 w-16" />
+                </CardContent>
+              </Card>
+            ))}
 
           {providers?.map((row) => {
             const meta = PROVIDER_META[row.provider];
@@ -229,7 +254,6 @@ export default function SettingsPage() {
             );
           })}
         </div>
-      </div>
-    </div>
+    </AppPageShell>
   );
 }

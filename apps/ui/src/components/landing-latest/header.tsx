@@ -9,7 +9,7 @@ import { Menu } from "lucide-react"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 
-function AuthCta({ className }: { className?: string }) {
+function AuthCta({ className, isLoggedIn }: { className?: string; isLoggedIn: boolean }) {
   const buttonClass = [
     "bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-full px-6 py-2 font-medium shadow-sm",
     className,
@@ -19,15 +19,18 @@ function AuthCta({ className }: { className?: string }) {
 
   return (
     <Button asChild className={buttonClass}>
-      <Link href="/main">Open workspace</Link>
+      <Link href={isLoggedIn ? "/main" : "/sign-up"}>
+        {isLoggedIn ? "Open workspace" : "Get started"}
+      </Link>
     </Button>
   )
 }
 
-export function Header() {
+export function Header({ isLoggedIn }: { isLoggedIn: boolean }) {
   const navItems = [
     { name: "Features", href: "#features-section" },
-    { name: "Testimonials", href: "#testimonials-section" }, // Changed from Docs to Testimonials
+    { name: "Workflow", href: "#workflow-section" },
+    { name: "FAQ", href: "#faq-section" },
   ]
 
   const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -69,7 +72,7 @@ export function Header() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle className="hidden md:inline-flex" />
-          <AuthCta className="hidden md:inline-flex" />
+          <AuthCta className="hidden md:inline-flex" isLoggedIn={isLoggedIn} />
           <Sheet>
             <SheetTrigger asChild className="md:hidden">
               <Button variant="ghost" size="icon" className="text-foreground">
@@ -92,7 +95,7 @@ export function Header() {
                     {item.name}
                   </Link>
                 ))}
-                <AuthCta className="mt-4 w-full" />
+                <AuthCta className="mt-4 w-full" isLoggedIn={isLoggedIn} />
                 <ThemeToggle className="mt-2 self-start" />
               </nav>
             </SheetContent>

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowUp, ChevronDown, ChevronRight, Paperclip } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { savePendingPrompt } from "@/lib/initial-prompt";
 import { cn } from "@/lib/utils";
 
-const DEFAULT_MODEL = "Fable 5";
+const DEFAULT_MODEL = "Build mode";
 
 export function PromptLauncher() {
   const router = useRouter();
@@ -25,7 +26,7 @@ export function PromptLauncher() {
   const [model] = useState(DEFAULT_MODEL);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const triggerLabel = fastMode ? `${model} Fast` : model;
+  const triggerLabel = fastMode ? "Fast build" : model;
 
   const handleSubmit = useCallback(() => {
     const trimmed = prompt.trim();
@@ -52,7 +53,7 @@ export function PromptLauncher() {
         value={prompt}
         onChange={(event) => setPrompt(event.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Describe the app you want Orin to build..."
+        placeholder="Describe the web app you want Orin to build..."
         className={cn(
           "min-h-[88px] resize-none border-0 bg-transparent px-4 pt-4 pb-1",
           "text-sm shadow-none placeholder:text-muted-foreground/55",
@@ -72,7 +73,7 @@ export function PromptLauncher() {
                 "hover:bg-muted/60 hover:text-muted-foreground",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
               )}
-              aria-label={`Model and options: ${triggerLabel}`}
+              aria-label={`Generation options: ${triggerLabel}`}
             >
               <span>{triggerLabel}</span>
               <ChevronDown className="size-3 opacity-60" aria-hidden />
@@ -83,10 +84,10 @@ export function PromptLauncher() {
             side="top"
             className="w-56 rounded-xl border-border bg-background/95 p-0 shadow-xl backdrop-blur-md"
           >
-            <PopoverTitle className="sr-only">Model and options</PopoverTitle>
+            <PopoverTitle className="sr-only">Generation options</PopoverTitle>
             <div className="p-3">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
-                Options
+                Generation
               </p>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <label
@@ -107,23 +108,23 @@ export function PromptLauncher() {
             <Separator className="bg-white/10" />
             <div className="p-3">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/60">
-                Model
+                Provider
               </p>
-              <button
-                type="button"
+              <Link
+                href="/main/settings"
                 className={cn(
                   "mt-2 flex w-full items-center justify-between rounded-md px-1 py-1.5",
                   "text-sm text-foreground transition-colors hover:bg-white/5",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                 )}
-                aria-label={`Selected model: ${model}`}
+                aria-label="Configure your AI provider"
               >
-                <span>{model}</span>
+                <span>Choose in Settings</span>
                 <ChevronRight
                   className="size-3.5 text-muted-foreground/60"
                   aria-hidden
                 />
-              </button>
+              </Link>
             </div>
           </PopoverContent>
         </Popover>

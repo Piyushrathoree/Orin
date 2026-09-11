@@ -1,115 +1,98 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { gsap } from "gsap"
-import { useGSAP } from "@gsap/react"
-import { motion, useInView, useReducedMotion } from "motion/react"
-import { Mic } from "lucide-react"
+import { useState } from "react"
+import { Code2, Eye, FileCode2, FolderTree, Monitor } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-gsap.registerPlugin(useGSAP)
+type WorkspaceView = "code" | "preview"
 
-const BAR_COUNT = 48
+const codeLines = [
+  "import { useState } from \"react\"",
+  "",
+  "export default function App() {",
+  "  const [ready, setReady] = useState(true)",
+  "  return <main>...</main>",
+  "}",
+]
 
-function formatTime(total: number) {
-  const minutes = Math.floor(total / 60)
-    .toString()
-    .padStart(2, "0")
-  const seconds = (total % 60).toString().padStart(2, "0")
-  return `${minutes}:${seconds}`
-}
-
-export default function VoiceAssistant() {
-  const rootRef = useRef<HTMLDivElement>(null)
-  const tweensRef = useRef<gsap.core.Tween[]>([])
-  const [recording, setRecording] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
-  const inView = useInView(rootRef, { amount: 0.35 })
-  const reduce = useReducedMotion()
-
-  useGSAP(
-    () => {
-      const bars = gsap.utils.toArray<HTMLElement>(".wave-bar")
-      gsap.set(bars, { scaleY: 0.18, transformOrigin: "center bottom" })
-      if (reduce) return
-
-      tweensRef.current = bars.map((bar, index) =>
-        gsap.to(bar, {
-          scaleY: () => gsap.utils.random(0.2, 1),
-          duration: () => gsap.utils.random(0.12, 0.28),
-          repeat: -1,
-          yoyo: true,
-          ease: "sine.inOut",
-          paused: true,
-          delay: index * 0.012,
-        }),
-      )
-    },
-    { scope: rootRef, dependencies: [reduce] },
-  )
-
-  useEffect(() => {
-    const tweens = tweensRef.current
-    if (recording && inView && !reduce) {
-      for (const tween of tweens) tween.play()
-      return
-    }
-    for (const tween of tweens) tween.pause()
-    const bars = rootRef.current?.querySelectorAll<HTMLElement>(".wave-bar")
-    if (bars?.length) {
-      gsap.to(bars, {
-        scaleY: 0.18,
-        duration: 0.35,
-        ease: "power2.out",
-        overwrite: "auto",
-      })
-    }
-  }, [recording, inView, reduce])
-
-  useEffect(() => {
-    if (!recording) {
-      setElapsed(0)
-      return
-    }
-    const id = window.setInterval(() => setElapsed((value) => value + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [recording])
+export default function WorkspacePanel() {
+  const [view, setView] = useState<WorkspaceView>("code")
 
   return (
     <div
-      ref={rootRef}
-      className="flex h-full flex-1 items-center justify-center"
+      className="flex h-full items-center justify-center p-5"
       role="img"
-      aria-label="Voice assistant with a live waveform you can start and stop"
+      aria-label="Orin workspace switching between a code editor and live preview"
     >
-      <div className="relative flex w-full max-w-50 flex-col items-center gap-3">
-        <motion.button
-          className="relative flex size-14 cursor-pointer items-center justify-center rounded-xl transition-colors hover:bg-accent"
-          type="button"
-          aria-pressed={recording}
-          aria-label={recording ? "Stop speaking" : "Click to speak"}
-          onClick={() => setRecording((value) => !value)}
-          whileHover={reduce ? undefined : { scale: 1.06 }}
-          whileTap={reduce ? undefined : { scale: 0.92 }}
-          transition={{ type: "spring", stiffness: 420, damping: 22 }}
-        >
-          {recording ? (
-            <span className="absolute inset-0 rounded-xl bg-primary/15" />
-          ) : null}
-          <Mic className="size-9 stroke-[1.5]" aria-hidden="true" />
-        </motion.button>
-        <span className="text-muted-foreground font-mono text-sm font-light tabular-nums">
-          {formatTime(elapsed)}
-        </span>
-        <div className="flex h-4 w-50 items-end justify-center gap-0.5 px-1 py-0.5">
-          {Array.from({ length: BAR_COUNT }).map((_, index) => (
-            <div
-              key={index}
-              className="wave-bar w-0.5 origin-bottom rounded-full bg-muted-foreground"
-              style={{ height: 16 }}
-            />
-          ))}
+      <div className="w-full max-w-80 overflow-hidden rounded-xl border border-border bg-background shadow-lg">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="size-2 rounded-full bg-primary" />
+            my-app
+          </div>
+          <div className="flex rounded-md bg-muted p-0.5">
+            <button
+              type="button"
+              aria-label="Show code"
+              aria-pressed={view === "code"}
+              onClick={() => setView("code")}
+              className={cn(
+                "rounded-sm p-1.5 text-muted-foreground transition-colors",
+                view === "code" && "bg-accent text-foreground",
+              )}
+            >
+              <Code2 className="size-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="Show preview"
+              aria-pressed={view === "preview"}
+              onClick={() => setView("preview")}
+              className={cn(
+                "rounded-sm p-1.5 text-muted-foreground transition-colors",
+                view === "preview" && "bg-accent text-foreground",
+              )}
+            >
+              <Eye className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
         </div>
-        <p className="text-card-foreground">{recording ? "Listening…" : "Click to speak"}</p>
+
+        {view === "code" ? (
+          <div className="grid min-h-36 grid-cols-[92px_1fr] text-[10px] leading-5">
+            <div className="border-r border-border bg-sidebar px-3 py-3 text-muted-foreground">
+              <div className="mb-1 flex items-center gap-1.5 text-foreground/80">
+                <FolderTree className="size-3" aria-hidden="true" />
+                src
+              </div>
+              <div className="flex items-center gap-1.5 pl-2 text-primary">
+                <FileCode2 className="size-3" aria-hidden="true" />
+                App.tsx
+              </div>
+              <div className="pl-6 text-muted-foreground/60">main.tsx</div>
+            </div>
+            <div className="overflow-hidden px-3 py-3 font-mono text-muted-foreground">
+              {codeLines.map((line, index) => (
+                <div key={`${line}-${index}`} className="whitespace-nowrap">
+                  <span className="mr-3 inline-block w-3 text-right text-muted-foreground/35">
+                    {index + 1}
+                  </span>
+                  <span className={index === 2 ? "text-primary" : ""}>{line || " "}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-h-36 flex-col items-center justify-center gap-3 bg-muted/30 px-6 text-center">
+            <div className="flex size-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+              <Monitor className="size-6" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-foreground">Preview is running</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">Updates appear as you edit</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -1,8 +1,11 @@
 import React from "react"
+import { cookies } from "next/headers"
+import { AUTH_COOKIE_NAME } from "@orin/auth/constants"
 import { Header } from "./header"
 import { PromptLauncher } from "./prompt-launcher"
 
-export function HeroSection() {
+export async function HeroSection() {
+  const isLoggedIn = (await cookies()).has(AUTH_COOKIE_NAME)
   return (
     <section
       className="flex flex-col items-center text-center relative mx-auto rounded-2xl overflow-hidden my-6 py-0 px-4
@@ -433,15 +436,15 @@ export function HeroSection() {
 
       {/* Header positioned at top of hero container */}
       <div className="absolute top-0 left-0 right-0 z-20">
-        <Header />
+        <Header isLoggedIn={isLoggedIn} />
       </div>
 
       <div className="relative z-10 space-y-4 md:space-y-5 lg:space-y-6 mb-6 md:mb-7 lg:mb-9 max-w-md md:max-w-[500px] lg:max-w-[588px] mt-16 md:mt-[120px] lg:mt-[160px] px-4">
         <h1 className="text-foreground text-3xl md:text-4xl lg:text-6xl font-semibold leading-tight">
-          Unleash the Power of AI Agents
+          Turn an idea into a working web app
         </h1>
         <p className="text-muted-foreground text-base md:text-base lg:text-lg font-medium leading-relaxed max-w-lg mx-auto">
-          Accelerate your development workflow with intelligent AI agents that write, review, and optimize your code.
+          Describe what you want to build. Orin creates a React project you can edit, run, preview, and share in your browser.
         </p>
       </div>
 

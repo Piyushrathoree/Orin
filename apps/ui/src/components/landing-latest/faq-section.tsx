@@ -6,34 +6,39 @@ import { ChevronDown } from "lucide-react"
 
 const faqData = [
   {
-    question: "What is Orin and who is it for?",
+    question: "What is Orin?",
     answer:
-      "Orin is an AI-powered development platform designed for developers, teams, and organizations who want to accelerate their coding workflow. It's perfect for individual developers and teams seeking seamless collaboration tools.",
+      "Orin is a browser-based AI coding workspace. Start or generate a React + Vite project, edit files, run commands, preview the app, and continue working in the same project room.",
   },
   {
-    question: "How does Orin's AI code review work?",
+    question: "How does project generation work?",
     answer:
-      "Our AI analyzes your code in real-time, providing intelligent suggestions for improvements, catching potential bugs, and ensuring best practices. It learns from your coding patterns and adapts to your team's standards, making code reviews faster and more consistent.",
+      "Enter a plain-language prompt from the landing page or workspace. After the project boots, Orin sends the prompt to your configured AI provider and applies the generated file changes to the project tree.",
   },
   {
-    question: "Can I integrate Orin with my existing tools?",
+    question: "Which AI providers can I use?",
     answer:
-      "Yes! Orin offers one-click integrations with popular development tools including GitHub, GitLab, VS Code, Slack, and many more. Its MCP connectivity lets you manage and configure server access across your development stack.",
+      "Settings supports OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, and a local OpenAI-compatible server such as Ollama. You can save a provider key and choose a model override.",
   },
   {
-    question: "What's included in the free plan?",
+    question: "Where are my projects saved?",
     answer:
-      "The free plan includes real-time code suggestions, basic integrations, a single MCP server connection, up to 2 AI coding agents, and deployments with Orin branding.",
+      "Projects are saved through the Orin backend, with browser storage available as a fallback. The workspace keeps up to five recent projects, and you can reopen or delete them from the project home.",
   },
   {
-    question: "How do parallel coding agents work?",
+    question: "How do editing and live preview work?",
     answer:
-      "Our parallel coding agents can work on different parts of your codebase simultaneously, solving complex problems faster than traditional single-threaded approaches. You can launch multiple agents to handle different tasks like bug fixes, feature development, and code optimization concurrently.",
+      "The project runs in a browser-based WebContainer. Use the Explorer and code editor to change files, the terminal to run commands, and Preview to see the app with desktop, tablet, or mobile sizing.",
   },
   {
-    question: "Is my code secure with Orin?",
+    question: "Can I work with someone else?",
     answer:
-      "Absolutely. We use enterprise-grade security measures including end-to-end encryption, secure data transmission, and compliance with industry standards. Your code never leaves your secure environment without your explicit permission, and we offer on-premises deployment options for enterprise customers.",
+      "Open the Peer tab inside a project room when the collaboration service is available. You can chat, share files, and connect with another person while the room keeps code changes synchronized.",
+  },
+  {
+    question: "Can I export a project to GitHub?",
+    answer:
+      "Yes. Use Export in the workspace, provide a GitHub Personal Access Token, and Orin will create a repository and upload the current project files.",
   },
 ]
 
@@ -96,10 +101,10 @@ export function FAQSection() {
       <div className="self-stretch pt-8 pb-8 md:pt-14 md:pb-14 flex flex-col justify-center items-center gap-2 relative z-10">
         <div className="flex flex-col justify-start items-center gap-4">
           <h2 className="w-full max-w-[435px] text-center text-foreground text-4xl font-semibold leading-10 break-words">
-            Frequently Asked Questions
+            Questions about the workspace
           </h2>
           <p className="self-stretch text-center text-muted-foreground text-sm font-medium leading-[18.20px] break-words">
-            Everything you need to know about Orin and how it can transform your development workflow
+            A few details about projects, AI providers, rooms, and the browser-based development environment
           </p>
         </div>
       </div>
