@@ -3,7 +3,7 @@ services:
     name: orin-api
     runtime: node
     plan: free
-    buildCommand: bun install --frozen-lockfile && bun run db:generate && bunx prisma migrate deploy --config packages/db/prisma.config.ts && bun run --cwd apps/orin-backend build
+    buildCommand: bun install --frozen-lockfile && bun run db:generate && bun run --cwd packages/db migrate:deploy && bun run --cwd apps/orin-backend build
     startCommand: bun run --cwd apps/orin-backend start
     healthCheckPath: /health
     envVars:
